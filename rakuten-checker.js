@@ -51,7 +51,7 @@
       }
     }
 
-    // 9. 本文エリアからの対象URL抽出
+    // 9. 本文エリアからの対象URL抽出（完全外部ドメインのみ厳しく判定）
     const currentHost = location.hostname;
     let targetUrls = new Set();
     let targetAnchors = [];
@@ -60,15 +60,18 @@
     const anchors = Array.from(b.querySelectorAll('a'));
     anchors.forEach(a => {
       if(a.closest('#side, .side, #sidebar, .sidebar, #footer, .footer, .nav, .menu')) return;
-      const h = a.href || a.getAttribute('href') || '';
-      if(h.startsWith('http')){
-        try {
-          if(new URL(h).hostname !== currentHost){
-            targetUrls.add(h);
-            targetAnchors.push(a);
-          }
-        } catch(e){}
-      }
+      
+      const rawHref = a.getAttribute('href') || '';
+      // 相対パス（/entry/...等）や自ドメインを完全に無視
+      if(!rawHref.startsWith('http://') && !rawHref.startsWith('https://')) return;
+
+      try {
+        const u = new URL(rawHref);
+        if(u.hostname !== currentHost && !u.hostname.includes('plaza.rakuten.co.jp')){
+          targetUrls.add(rawHref);
+          targetAnchors.push(a);
+        }
+      } catch(e){}
     });
 
     // B: 直書きテキスト経由（https://〜）
@@ -77,7 +80,8 @@
     rawMatches.forEach(url => {
       let clean = url.replace(/&amp;/g, '&').replace(/[\s\)\>\]]+$/, '');
       try {
-        if(new URL(clean).hostname !== currentHost){
+        const u = new URL(clean);
+        if(u.hostname !== currentHost && !u.hostname.includes('plaza.rakuten.co.jp')){
           targetUrls.add(clean);
         }
       } catch(e){}
@@ -108,7 +112,6 @@
 
     alert(msg);
 
-    // ページ遷移防止のため非同期で別タブ展開
     if(finalUrlList.length > 0 && confirm("検出された対象リンク（" + finalUrlList.length + "件）をすべて別タブで開いて確認しますか？")){
       setTimeout(() => {
         finalUrlList.forEach(url => window.open(url, '_blank'));
