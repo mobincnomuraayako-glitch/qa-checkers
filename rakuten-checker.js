@@ -11,7 +11,7 @@
     const txt = txtEl ? txtEl.innerText.trim() : "";
     if(!txt) missing.push("記事タイトル");
 
-    // 2. 本文エリアの特定（div.dText）
+    // 2. 本文エリアの特定
     const b = document.querySelector('.dText, .break-word, .real_entry_body, .entry_body') || document.body;
 
     // 3. 冒頭画像チェック
@@ -51,67 +51,59 @@
       }
     }
 
-    // 9. 本文エリア（.dText）内から特定の対象リンク（マップ・店舗情報・編集部コメント周辺のaタグ）だけを厳しく抽出
+    // 9. 対象リンク抽出（Googleマップ ＆ 編集部コメント/店舗情報一覧 直後のリンクのみ）
     const currentHost = location.hostname;
+    let foundUrls = new Set();
     let targetAnchors = [];
 
-    // ① Googleマップリンク（aタグでhrefにmaps含むもの）
-    Array.from(b.querySelectorAll('a')).forEach(a => {
-      const h = a.getAttribute('href') || '';
-      if(h.includes('maps.google') || h.includes('goo.gl/maps') || h.includes('google.com/maps')){
+    // 本文内の全 HTML <a> タグを取得
+    const allAnchors = Array.from(b.getElementsByTagName('a'));
+
+    allAnchors.forEach(a => {
+      const href = a.href || a.getAttribute('href') || '';
+      if(!href.startsWith('http')) return;
+      
+      // 自ドメイン除外
+      try {
+        if(new URL(href).hostname === currentHost) return;
+      } catch(e) { return; }
+
+      // 条件1: Googleマップリンク
+      const isMap = href.includes('maps.google') || href.includes('goo.gl/maps') || href.includes('google.com/maps') || href.includes('maps.app.goo.gl');
+      
+      // 条件2: 編集部コメントまたは店舗情報一覧の領域内にあるリンク
+      let isTargetArea = false;
+      let parent = a.parentElement;
+      for(let i = 0; i < 5 && parent; i++){
+        const pText = parent.innerText || '';
+        if(pText.includes('編集部コメント') || pText.includes('店舗情報一覧')){
+          isTargetArea = true;
+          break;
+        }
+        parent = parent.parentElement;
+      }
+
+      if((isMap || isTargetArea) && !foundUrls.has(href)){
+        foundUrls.add(href);
         targetAnchors.push(a);
       }
     });
 
-    // ② 店舗情報一覧・編集部コメント 直近の a タグのみ取得
-    const allNodes = Array.from(b.querySelectorAll('*'));
-    allNodes.forEach(el => {
-      // 子要素を持たない純粋なテキストノードの親で判定
-      if (el.children.length === 0) {
-        const text = el.innerText ? el.innerText.trim() : '';
-        if (text === '店舗情報一覧' || text === '編集部コメント') {
-          // その見出し要素の親の次にある要素内のaタグを探索
-          let p = el.parentElement;
-          for (let i = 0; i < 3 && p; i++) {
-            let next = p.nextElementSibling;
-            if (next) {
-              Array.from(next.querySelectorAll('a')).forEach(a => targetAnchors.push(a));
-              if (next.tagName === 'A') targetAnchors.push(next);
-            }
-            p = p.parentElement;
-          }
-        }
-      }
-    });
-
-    // ③ 重複除去 & 外部ドメイン判定
-    const uniqueAnchors = Array.from(new Set(targetAnchors));
-    const extLinks = uniqueAnchors.filter(a => {
-      const h = a.getAttribute('href') || '';
-      if(!h.startsWith('http')) return false;
-      try {
-        const u = new URL(h);
-        return u.hostname !== currentHost;
-      } catch(e) {
-        return false;
-      }
-    });
-
     // 別窓（target="_blank"）チェック
-    let nonBlankLinks = extLinks.filter(a => {
+    let nonBlankLinks = targetAnchors.filter(a => {
       const t = (a.target || a.getAttribute('target') || '').toLowerCase();
       const r = (a.getAttribute('rel') || '').toLowerCase();
       return t !== '_blank' && !r.includes('noopener') && !r.includes('blank');
     });
 
     if(nonBlankLinks.length > 0){
-      issues.push("リンク異常: 店舗情報・編集部コメント内のリンクで別窓（target=\"_blank\"）になっていないものが " + nonBlankLinks.length + " 件あります");
+      issues.push("リンク異常: 対象リンクで別窓（target=\"_blank\"）になっていないものが " + nonBlankLinks.length + " 件あります");
     }
 
     // 結果表示
     let msg = "【楽天ブログ判定結果】\n";
     if(missing.length === 0 && issues.length === 0){
-      msg += "✅ 問題なし（全11項目・冒頭画像・カテゴリ・AIコード・対象リンク別窓正常: " + extLinks.length + "件検知）";
+      msg += "✅ 問題なし（全11項目・冒頭画像・カテゴリ・AIコード・対象リンク別窓正常: " + targetAnchors.length + "件検知）";
     } else {
       msg += "❌ 要修正\n\n";
       if(missing.length > 0) msg += "■ 不足要素:\n・" + missing.join("\n・") + "\n\n";
@@ -120,8 +112,8 @@
 
     alert(msg);
 
-    if(extLinks.length > 0 && confirm("検出された対象リンク（" + extLinks.length + "件）をすべて別タブで開いて確認しますか？")){
-      extLinks.forEach(a => window.open(a.href, '_blank'));
+    if(targetAnchors.length > 0 && confirm("検出された対象リンク（" + targetAnchors.length + "件）をすべて別タブで開いて確認しますか？")){
+      targetAnchors.forEach(a => window.open(a.href, '_blank'));
     }
 
   } catch(err) {
