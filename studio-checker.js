@@ -49,24 +49,52 @@
       }
     }
 
-    // 8. リンク（別窓）チェック
-    const allLinks = b ? Array.from(b.querySelectorAll('a')) : [];
-    const links = allLinks.filter(a => {
-      const h = a.getAttribute('href');
-      if(!h || h.startsWith('#') || h.startsWith('javascript:') || h.startsWith('mailto:') || h.startsWith('tel:')) return false;
-      if(a.closest('header, footer, nav')) return false;
-      return true;
+    // 8. リンク（店舗情報一覧・編集部コメント・マップ）別窓チェック
+    const currentHost = location.hostname;
+    let rawTargetLinks = Array.from(document.querySelectorAll('td a'));
+
+    Array.from(document.querySelectorAll('a')).forEach(a => {
+      const h = a.getAttribute('href') || '';
+      if(h.includes('maps.google') || h.includes('goo.gl/maps') || h.includes('google.com/maps')){
+        rawTargetLinks.push(a);
+      }
     });
 
-    let nonBlankLinks = links.filter(a => a.target !== '_blank');
+    const headings = Array.from(document.querySelectorAll('h2, h3, h4, [class*="heading"]'));
+    const commentHeading = headings.find(h => h.innerText && h.innerText.includes('編集部コメント'));
+    if(commentHeading){
+      let parent = commentHeading.parentElement;
+      if(parent){
+        Array.from(parent.querySelectorAll('a')).forEach(a => rawTargetLinks.push(a));
+      }
+    }
+
+    const uniqueElements = Array.from(new Set(rawTargetLinks));
+    const extLinks = uniqueElements.filter(a => {
+      const h = a.getAttribute('href') || '';
+      if(!h.startsWith('http')) return false;
+      try {
+        const u = new URL(h);
+        return u.hostname !== currentHost;
+      } catch(e) {
+        return false;
+      }
+    });
+
+    let nonBlankLinks = extLinks.filter(a => {
+      const t = (a.target || a.getAttribute('target') || '').toLowerCase();
+      const r = (a.getAttribute('rel') || '').toLowerCase();
+      return t !== '_blank' && !r.includes('noopener') && !r.includes('blank');
+    });
+
     if(nonBlankLinks.length > 0){
-      issues.push("リンク異常: 記事内のリンクで別窓（target=\"_blank\"）になっていないものが " + nonBlankLinks.length + " 件あります");
+      issues.push("リンク異常: 店舗情報・編集部コメント内のリンクで別窓（target=\"_blank\"）になっていないものが " + nonBlankLinks.length + " 件あります");
     }
 
     // 結果表示
     let msg = "【STUDIO判定結果】\n";
     if(missing.length === 0 && issues.length === 0){
-      msg += "✅ 問題なし（全11項目・冒頭画像・カテゴリ・AIコード・別窓リンク正常）";
+      msg += "✅ 問題なし（全11項目・冒頭画像・カテゴリ・AIコード・対象リンク別窓正常: " + extLinks.length + "件検知）";
     } else {
       msg += "❌ 要修正\n\n";
       if(missing.length > 0) msg += "■ 不足要素:\n・" + missing.join("\n・") + "\n\n";
@@ -75,8 +103,8 @@
 
     alert(msg);
 
-    if(links.length > 0 && confirm("記事内のリンク（" + links.length + "件）をすべて別タブで開いて確認しますか？")){
-      links.forEach(a => window.open(a.href, '_blank'));
+    if(extLinks.length > 0 && confirm("検出された対象リンク（" + extLinks.length + "件）をすべて別タブで開いて確認しますか？")){
+      extLinks.forEach(a => window.open(a.href, '_blank'));
     }
 
   } catch(err) {
