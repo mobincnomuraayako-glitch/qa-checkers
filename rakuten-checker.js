@@ -12,7 +12,7 @@
     if(!txt) missing.push("記事タイトル");
 
     // 2. 冒頭画像チェック
-    const b = document.querySelector('.entry-content, .diary-content, article, main') || document.body;
+    const b = document.querySelector('.real_entry_body, .entry_body, .entry-content, .diary-content') || document.body;
     const firstImg = b ? b.querySelector('img') : null;
     if(!firstImg) missing.push("冒頭画像（本文内に画像が見つかりません）");
 
@@ -49,25 +49,36 @@
       }
     }
 
-    // 8. 対象エリア（店舗情報テーブル・Googleマップ・編集部コメント）限定チェック
+    // 8. ピンポイント対象リンク抽出（Googleマップ / 店舗情報一覧 / 編集部コメント）
     const currentHost = location.hostname;
-    let rawTargetLinks = Array.from(document.querySelectorAll('td a'));
+    let rawTargetLinks = [];
 
-    Array.from(document.querySelectorAll('a')).forEach(a => {
+    // Googleマップリンク
+    Array.from(b.querySelectorAll('a')).forEach(a => {
       const h = a.getAttribute('href') || '';
       if(h.includes('maps.google') || h.includes('goo.gl/maps') || h.includes('google.com/maps')){
         rawTargetLinks.push(a);
       }
     });
 
-    const headings = Array.from(document.querySelectorAll('h2, h3, h4, [class*="heading"]'));
-    const commentHeading = headings.find(h => h.innerText && h.innerText.includes('編集部コメント'));
-    if(commentHeading){
-      let parent = commentHeading.parentElement;
-      if(parent){
-        Array.from(parent.querySelectorAll('a')).forEach(a => rawTargetLinks.push(a));
+    // 店舗情報一覧・編集部コメントの直近要素リンク
+    const headings = Array.from(b.querySelectorAll('h1, h2, h3, h4, h5, strong, b'));
+    headings.forEach(h => {
+      const t = (h.innerText || '').trim();
+      if(t.includes('店舗情報一覧') || t.includes('編集部コメント')){
+        let next = h.nextElementSibling;
+        let count = 0;
+        while(next && count < 5){
+          if(next.tagName === 'A'){
+            rawTargetLinks.push(next);
+          } else {
+            Array.from(next.querySelectorAll('a')).forEach(a => rawTargetLinks.push(a));
+          }
+          next = next.nextElementSibling;
+          count++;
+        }
       }
-    }
+    });
 
     const uniqueElements = Array.from(new Set(rawTargetLinks));
     const extLinks = uniqueElements.filter(a => {
