@@ -11,8 +11,8 @@
     const txt = txtEl ? txtEl.innerText.trim() : "";
     if(!txt) missing.push("記事タイトル");
 
-    // 2. 本文エリアの特定（親要素を柔軟に検索）
-    const b = document.querySelector('.dText, .break-word, .real_entry_body, .entry_body, #entry_body') || document.body;
+    // 2. 本文エリアの特定（複数のクラス候補を広範にカバー）
+    const b = document.querySelector('.dText, .break-word, .real_entry_body, .entry_body, #entry_body, .entry-content') || document.body;
 
     // 3. 冒頭画像チェック
     const firstImg = b ? b.querySelector('img') : null;
@@ -51,14 +51,16 @@
       }
     }
 
-    // 9. 本文エリアからの全方式（aタグ / href属性 / 生テキスト）のURL一括抽出
+    // 9. 本文エリアからの全URL抽出
     const currentHost = location.hostname;
     let targetUrls = new Set();
     let targetAnchors = [];
 
-    // 方法A: 本文内の <a> タグを全網羅
+    // 方法A: a タグ経由（サイドバー等の要素を除外）
     const anchors = Array.from(b.querySelectorAll('a'));
     anchors.forEach(a => {
+      // サイドバーやフッターに囲まれていればスキップ
+      if(a.closest('#side, .side, #sidebar, .sidebar, #footer, .footer, .nav, .menu')) return;
       const h = a.href || a.getAttribute('href') || '';
       if(h.startsWith('http')){
         try {
@@ -70,11 +72,10 @@
       }
     });
 
-    // 方法B: 本文（b）のHTMLおよびテキスト全体から直接URLを抽出（直書き対策）
-    const bHtml = b.innerHTML || "";
-    const rawMatches = bHtml.match(/https?:\/\/[^\s\<\>"\']+/g) || [];
+    // 方法B: 本文テキスト内（innerText）の直書き https:// を直接パース
+    const bText = b.innerText || "";
+    const rawMatches = bText.match(/https?:\/\/[^\s\<\>"\']+/g) || [];
     rawMatches.forEach(url => {
-      // 特殊記号やゴミをカット
       let clean = url.replace(/&amp;/g, '&').replace(/[\)\.\,]+$/, '');
       try {
         if(new URL(clean).hostname !== currentHost){
