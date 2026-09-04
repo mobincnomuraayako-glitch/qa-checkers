@@ -11,33 +11,35 @@
     const txt = txtEl ? txtEl.innerText.trim() : "";
     if(!txt) missing.push("記事タイトル");
 
-    // 2. 冒頭画像チェック
-    const b = document.querySelector('.real_entry_body, .entry_body, .entry-content, .diary-content') || document.body;
+    // 2. 本文エリアの特定（div.dText / .break-word を優先取得）
+    const b = document.querySelector('.dText, .break-word, .real_entry_body, .entry_body') || document.body;
+
+    // 3. 冒頭画像チェック
     const firstImg = b ? b.querySelector('img') : null;
     if(!firstImg) missing.push("冒頭画像（本文内に画像が見つかりません）");
 
-    // 3. タイトル地名チェック
+    // 4. タイトル地名チェック
     if(txt && (/^(北海道|青森県|岩手県|宮城県|秋田県|山形県|福島県|茨城県|栃木県|群馬県|埼玉県|千葉県|東京都|神奈川県|新潟県|富山県|石川県|福井県|山梨県|長野県|岐阜県|静岡県|愛知県|三重県|滋賀県|京都府|大阪府|兵庫県|奈良県|和歌山県|鳥取県|島根県|岡山県|広島県|山口県|徳島県|香川県|愛媛県|高知県|福岡県|佐賀県|長崎県|熊本県|大分県|宮崎県|鹿児島県|沖縄県)/.test(txt) || /^.{1,5}[市区町村]/.test(txt))){
       issues.push("タイトル異常: 先頭が地名（「" + txt.substring(0,8) + "…」）");
     }
 
-    // 4. カテゴリチェック
+    // 5. カテゴリチェック
     if(!pageText.includes("カテゴリ") || pageText.includes("カテゴリ：未分類")){
       missing.push("カテゴリ（設定なしまたは未分類）");
     }
 
-    // 5. 必須要素チェック
+    // 6. 必須要素チェック
     const requiredItems = ["基本情報","店舗概要","所在地・アクセス","営業時間・定休日","サービス","設備","店舗情報一覧","まとめ","FAQ","編集部コメント","Googleマップ"];
     requiredItems.forEach(item => {
       if(!pageText.includes(item)) missing.push(item);
     });
 
-    // 6. AI参照コード混入チェック
+    // 7. AI参照コード混入チェック
     if(/cit_[a-zA-Z0-9_-]{3,}/i.test(fullHtml) || /data-cit/i.test(fullHtml) || /context[a-zA-Z0-9_-]*/i.test(fullHtml.slice(-2000)) || /cite/i.test(fullHtml.slice(-2000))){
       issues.push("AI参照コード混入疑い: 「cit_...」「context」等のAIコード・属性が検出されました");
     }
 
-    // 7. 編集部コメントURL判定
+    // 8. 編集部コメントURL判定
     const ci = pageText.indexOf("編集部コメント");
     if(ci !== -1){
       let ct = pageText.substring(ci);
@@ -49,44 +51,14 @@
       }
     }
 
-    // 8. ピンポイント対象リンク抽出（Googleマップ / 店舗情報一覧 / 編集部コメント）
+    // 9. 本文エリア（.dText）内のみから対象リンクを安全抽出
     const currentHost = location.hostname;
-    let rawTargetLinks = [];
+    
+    // b（.dText）に含まれる全リンクを取得
+    const allLinksInBody = Array.from(b.querySelectorAll('a'));
 
-    // Googleマップリンク
-    Array.from(b.querySelectorAll('a')).forEach(a => {
-      const h = a.getAttribute('href') || '';
-      if(h.includes('maps.google') || h.includes('goo.gl/maps') || h.includes('google.com/maps')){
-        rawTargetLinks.push(a);
-      }
-    });
-
-    // 見出しの直近要素リンク
-    const headings = Array.from(b.querySelectorAll('h1, h2, h3, h4, h5, [class*="heading"], [class*="title"]'));
-    headings.forEach(h => {
-      const t = (h.innerText || '').trim();
-      if(t === '店舗情報一覧' || t === '編集部コメント' || t.includes('店舗情報一覧') || t.includes('編集部コメント')){
-        let next = h.nextElementSibling;
-        let count = 0;
-        while(next && count < 3){
-          if(next.tagName === 'A'){
-            rawTargetLinks.push(next);
-          } else {
-            Array.from(next.querySelectorAll('a')).forEach(a => rawTargetLinks.push(a));
-          }
-          next = next.nextElementSibling;
-          count++;
-        }
-      }
-    });
-
-    const uniqueElements = Array.from(new Set(rawTargetLinks));
-
-    // ★強力な除外フィルタ：サイドバー・フッター・ナビゲーション内のリンクを強制排除★
-    const extLinks = uniqueElements.filter(a => {
-      if (a.closest('#side, .side, #sidebar, .sidebar, #footer, .footer, .nav, .menu, [class*="side"]')) {
-        return false;
-      }
+    // 外部リンク（自ドメイン除外）のみ抽出
+    const extLinks = allLinksInBody.filter(a => {
       const h = a.getAttribute('href') || '';
       if(!h.startsWith('http')) return false;
       try {
@@ -97,6 +69,7 @@
       }
     });
 
+    // 別窓（target="_blank"）チェック
     let nonBlankLinks = extLinks.filter(a => {
       const t = (a.target || a.getAttribute('target') || '').toLowerCase();
       const r = (a.getAttribute('rel') || '').toLowerCase();
@@ -104,7 +77,7 @@
     });
 
     if(nonBlankLinks.length > 0){
-      issues.push("リンク異常: 店舗情報・編集部コメント内のリンクで別窓（target=\"_blank\"）になっていないものが " + nonBlankLinks.length + " 件あります");
+      issues.push("リンク異常: 本文内のリンクで別窓（target=\"_blank\"）になっていないものが " + nonBlankLinks.length + " 件あります");
     }
 
     // 結果表示
