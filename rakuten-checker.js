@@ -68,20 +68,18 @@
       }
     }
 
-    // 10. 本文エリア（b）からの厳格な外部リンク抽出（楽天ドメインは完全遮断）
+    // 10. 本文エリア（b）からの外部リンク抽出（楽天ドメインは完全遮断）
     let targetUrls = new Set();
     let targetAnchors = [];
 
     // A: <a> タグ経由
     const anchors = Array.from(b.querySelectorAll('a'));
     anchors.forEach(a => {
-      // getAttribute('href') を優先取得し、相対パスやJavaScriptリンクを完全に排除
       const rawHref = a.getAttribute('href') || '';
       if(!rawHref.startsWith('http://') && !rawHref.startsWith('https://')) return;
 
       try {
         const u = new URL(rawHref);
-        // rakuten を含むドメインをすべて除外（マイページ遷移防止）
         if(!u.hostname.includes('rakuten')){
           targetUrls.add(rawHref);
           targetAnchors.push(a);
@@ -114,27 +112,36 @@
       issues.push("リンク異常: 本文内のaタグリンクで別窓（target=\"_blank\"）になっていないものが " + nonBlankLinks.length + " 件あります");
     }
 
-    // 結果表示
-    let msg = "【楽天ブログ判定結果】\n";
+    // 結果表示メッセージの整形
+    let msg = "【楽天ブログ判定結果】\n\n";
     if(missing.length === 0 && issues.length === 0){
-      msg += "✅ 問題なし（全11項目・冒頭画像・カテゴリ・AIコード・AI不適切文言・対象URL正常検出: " + finalUrlList.length + "件検知）\n\n";
+      msg += "✅ 問題なし（全11項目・冒頭画像・カテゴリ・AIコード・AI不適切文言正常）\n";
     } else {
-      msg += "❌ 要修正\n\n";
-      if(missing.length > 0) msg += "■ 不足要素:\n・" + missing.join("\n・") + "\n\n";
-      if(issues.length > 0) msg += "■ 異常検出:\n・" + issues.join("\n・") + "\n\n";
+      msg += "❌ 要修正\n";
+      if(missing.length > 0) msg += "\n■ 不足要素:\n・" + missing.join("\n・") + "\n";
+      if(issues.length > 0) msg += "\n■ 異常検出:\n・" + issues.join("\n・") + "\n";
     }
 
+    msg += "\n----------------------------------------\n";
     if(finalUrlList.length > 0) {
-      msg += "【検出された外部リンク一覧】\n・" + finalUrlList.join("\n・");
+      msg += "【検出された外部リンク（" + finalUrlList.length + "件）】\n・" + finalUrlList.join("\n・");
     } else {
-      msg += "【検出された外部リンク】\n・対象の外部リンクなし";
+      msg += "【検出された外部リンク】\n・なし";
     }
 
     alert(msg);
 
+    // リンクの一括展開（Googleマップ短縮URLのダイナミックリンクエラー対策済み）
     if(finalUrlList.length > 0 && confirm("検出された上記の対象リンク（" + finalUrlList.length + "件）をすべて別タブで開いて確認しますか？")){
       setTimeout(() => {
-        finalUrlList.forEach(url => window.open(url, '_blank'));
+        finalUrlList.forEach(url => {
+          let openTarget = url;
+          // maps.app.goo.gl 等の短縮リンクで発生するダイナミックリンクエラーを回避
+          if(url.includes('maps.app.goo.gl') || url.includes('goo.gl/maps')){
+            openTarget = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(url);
+          }
+          window.open(openTarget, '_blank');
+        });
       }, 100);
     }
 
