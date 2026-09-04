@@ -11,11 +11,10 @@
     const txt = txtEl ? txtEl.innerText.trim() : "";
     if(!txt) missing.push("記事タイトル");
 
-    // 2. 本文エリア（.dText）の厳格な特定
-    // 管理画面枠を完全に除外するため、.dTextまたは実際の記事本文枠のみをターゲットにする
-    const b = document.querySelector('.dText, .real_entry_body, .entry_body');
+    // 2. 本文エリアの特定
+    const b = document.querySelector('.real_entry_body, #entry_body, .dText, .entry_body, .entry-content');
     if(!b) {
-      alert("エラー: 記事本文エリア（.dText）が見つかりません。公開ページまたはプレビュー画面で実行してください。");
+      alert("エラー: 記事本文エリア（.real_entry_body 等）が見つかりません。公開ページで実行してください。");
       return;
     }
 
@@ -44,7 +43,20 @@
       issues.push("AI参照コード混入疑い: 「cit_...」「context」等のAIコード・属性が検出されました");
     }
 
-    // 8. 編集部コメントURL判定
+    // 8. AI「入力」不適切回答チェック（Q&A等のミス回答対策）
+    const mainText = b.innerText || "";
+    const aiPatterns = ["入力されています", "入力情報では", "入力されていません", "入力情報"];
+    let foundAiWords = [];
+    aiPatterns.forEach(pattern => {
+      if (mainText.includes(pattern)) {
+        foundAiWords.push(pattern);
+      }
+    });
+    if (foundAiWords.length > 0) {
+      issues.push("AI異常文言検出: 本文/Q&A内に「" + foundAiWords.join("」「") + "」が含まれています");
+    }
+
+    // 9. 編集部コメントURL判定
     const ci = pageText.indexOf("編集部コメント");
     if(ci !== -1){
       let ct = pageText.substring(ci);
@@ -56,19 +68,18 @@
       }
     }
 
-    // 9. 本文エリア（b）内部限定の外部リンク抽出
+    // 10. 本文エリア（b）からの外部リンク抽出
     let targetUrls = new Set();
     let targetAnchors = [];
 
-    // A: 本文内の <a> タグから抽出（楽天関連ドメインは完全排除）
+    // A: <a> タグ経由
     const anchors = Array.from(b.querySelectorAll('a'));
     anchors.forEach(a => {
-      const rawHref = a.getAttribute('href') || '';
+      const rawHref = a.getAttribute('href') || a.href || '';
       if(!rawHref.startsWith('http://') && !rawHref.startsWith('https://')) return;
 
       try {
         const u = new URL(rawHref);
-        // rakuten ドメイン全般（管理画面・ブログTOP・画像直リンク）を除外
         if(!u.hostname.includes('rakuten.co.jp') && !u.hostname.includes('rakuten.ne.jp')){
           targetUrls.add(rawHref);
           targetAnchors.push(a);
@@ -76,9 +87,8 @@
       } catch(e){}
     });
 
-    // B: 本文（b）の直書きテキスト（https://...）から抽出
-    const bText = b.innerText || "";
-    const rawMatches = bText.match(/https?:\/\/[^\s\<\>"\']+/g) || [];
+    // B: 直書きテキスト経由（https://...）
+    const rawMatches = mainText.match(/https?:\/\/[^\s\<\>"\']+/g) || [];
     rawMatches.forEach(url => {
       let clean = url.replace(/&amp;/g, '&').replace(/[\s\)\>\]]+$/, '');
       try {
@@ -105,7 +115,7 @@
     // 結果表示
     let msg = "【楽天ブログ判定結果】\n";
     if(missing.length === 0 && issues.length === 0){
-      msg += "✅ 問題なし（全11項目・冒頭画像・カテゴリ・AIコード・対象URL正常検出: " + finalUrlList.length + "件検知）\n\n";
+      msg += "✅ 問題なし（全11項目・冒頭画像・カテゴリ・AIコード・AI不適切文言・対象URL正常検出: " + finalUrlList.length + "件検知）\n\n";
     } else {
       msg += "❌ 要修正\n\n";
       if(missing.length > 0) msg += "■ 不足要素:\n・" + missing.join("\n・") + "\n\n";
