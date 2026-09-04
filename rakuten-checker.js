@@ -131,7 +131,7 @@
 
     alert(msg);
 
-    // リンクの一括展開（無理な変換を行わず素直にそのまま開く）
+    // リンクの一括展開
     if(finalUrlList.length > 0 && confirm("検出された上記の対象リンク（" + finalUrlList.length + "件）をすべて別タブで開いて確認しますか？")){
       setTimeout(function(){
         finalUrlList.forEach(function(url){
