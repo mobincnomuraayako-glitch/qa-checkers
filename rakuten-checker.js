@@ -61,7 +61,7 @@
       }
     });
 
-    // 正確な見出し要素のみを探索（純粋なh1〜h5タグまたは見出し専用クラス）
+    // 見出しの直近要素リンク
     const headings = Array.from(b.querySelectorAll('h1, h2, h3, h4, h5, [class*="heading"], [class*="title"]'));
     headings.forEach(h => {
       const t = (h.innerText || '').trim();
@@ -81,7 +81,12 @@
     });
 
     const uniqueElements = Array.from(new Set(rawTargetLinks));
+
+    // ★強力な除外フィルタ：サイドバー・フッター・ナビゲーション内のリンクを強制排除★
     const extLinks = uniqueElements.filter(a => {
+      if (a.closest('#side, .side, #sidebar, .sidebar, #footer, .footer, .nav, .menu, [class*="side"]')) {
+        return false;
+      }
       const h = a.getAttribute('href') || '';
       if(!h.startsWith('http')) return false;
       try {
