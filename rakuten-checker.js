@@ -11,8 +11,8 @@
     const txt = txtEl ? txtEl.innerText.trim() : "";
     if(!txt) missing.push("記事タイトル");
 
-    // 2. 本文エリアの特定（複数のクラス候補を広範にカバー）
-    const b = document.querySelector('.dText, .break-word, .real_entry_body, .entry_body, #entry_body, .entry-content') || document.body;
+    // 2. 本文エリアの特定（div.dText）
+    const b = document.querySelector('.dText, .break-word, .real_entry_body, .entry_body, #entry_body') || document.body;
 
     // 3. 冒頭画像チェック
     const firstImg = b ? b.querySelector('img') : null;
@@ -51,15 +51,14 @@
       }
     }
 
-    // 9. 本文エリアからの全URL抽出
+    // 9. 本文エリアからの対象URL抽出
     const currentHost = location.hostname;
     let targetUrls = new Set();
     let targetAnchors = [];
 
-    // 方法A: a タグ経由（サイドバー等の要素を除外）
+    // A: <a> タグ経由
     const anchors = Array.from(b.querySelectorAll('a'));
     anchors.forEach(a => {
-      // サイドバーやフッターに囲まれていればスキップ
       if(a.closest('#side, .side, #sidebar, .sidebar, #footer, .footer, .nav, .menu')) return;
       const h = a.href || a.getAttribute('href') || '';
       if(h.startsWith('http')){
@@ -72,11 +71,11 @@
       }
     });
 
-    // 方法B: 本文テキスト内（innerText）の直書き https:// を直接パース
+    // B: 直書きテキスト経由（https://〜）
     const bText = b.innerText || "";
     const rawMatches = bText.match(/https?:\/\/[^\s\<\>"\']+/g) || [];
     rawMatches.forEach(url => {
-      let clean = url.replace(/&amp;/g, '&').replace(/[\)\.\,]+$/, '');
+      let clean = url.replace(/&amp;/g, '&').replace(/[\s\)\>\]]+$/, '');
       try {
         if(new URL(clean).hostname !== currentHost){
           targetUrls.add(clean);
@@ -109,8 +108,11 @@
 
     alert(msg);
 
+    // ページ遷移防止のため非同期で別タブ展開
     if(finalUrlList.length > 0 && confirm("検出された対象リンク（" + finalUrlList.length + "件）をすべて別タブで開いて確認しますか？")){
-      finalUrlList.forEach(url => window.open(url, '_blank'));
+      setTimeout(() => {
+        finalUrlList.forEach(url => window.open(url, '_blank'));
+      }, 100);
     }
 
   } catch(err) {
