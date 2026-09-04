@@ -51,49 +51,53 @@
       }
     }
 
-    // 9. 本文エリア（.dText）内のリンク抽出
+    // 9. 本文エリア（.dText）内のURL抽出（aタグ ＋ 直書きURL文字列）
     const currentHost = location.hostname;
-    let foundUrls = new Set();
-    let targetAnchors = [];
+    let targetUrls = new Set();
+    let nonBlankLinks = [];
 
+    // ① 本文内の a タグから抽出
     const allAnchors = Array.from(b.getElementsByTagName('a'));
-
     allAnchors.forEach(a => {
       const href = a.href || a.getAttribute('href') || '';
       if(!href.startsWith('http')) return;
-
       try {
         if(new URL(href).hostname === currentHost) return;
       } catch(e) { return; }
 
-      // ① Googleマップリンク
-      const isMap = href.includes('maps.google') || href.includes('goo.gl/maps') || href.includes('google.com/maps') || href.includes('maps.app.goo.gl');
+      targetUrls.add(href);
 
-      // ② 店舗情報・編集部コメント・または本文内にある外部公式サイトなどのリンク
-      // (サイドバー・フッター・ナビ・ランキング要素は完全除外)
-      const isSideOrFooter = a.closest('#side, .side, #sidebar, .sidebar, #footer, .footer, .nav, .menu, [class*="side"], [class*="footer"]');
-
-      if((isMap || !isSideOrFooter) && !foundUrls.has(href)){
-        foundUrls.add(href);
-        targetAnchors.push(a);
+      // 別窓チェック
+      const t = (a.target || a.getAttribute('target') || '').toLowerCase();
+      const r = (a.getAttribute('rel') || '').toLowerCase();
+      if(t !== '_blank' && !r.includes('noopener') && !r.includes('blank')){
+        nonBlankLinks.push(a);
       }
     });
 
-    // 別窓（target="_blank"）チェック
-    let nonBlankLinks = targetAnchors.filter(a => {
-      const t = (a.target || a.getAttribute('target') || '').toLowerCase();
-      const r = (a.getAttribute('rel') || '').toLowerCase();
-      return t !== '_blank' && !r.includes('noopener') && !r.includes('blank');
+    // ② 本文テキスト内の直書きURL（https://...）を正規表現で抽出
+    const bText = b.innerText || "";
+    const matchedUrls = bText.match(/https?:\/\/[^\s\<\>"\']+/g) || [];
+    matchedUrls.forEach(url => {
+      // 末尾の記号などを除去
+      const cleanUrl = url.replace(/[\)\.\,]+$/, '');
+      try {
+        if(new URL(cleanUrl).hostname !== currentHost){
+          targetUrls.add(cleanUrl);
+        }
+      } catch(e) {}
     });
 
+    const finalUrlList = Array.from(targetUrls);
+
     if(nonBlankLinks.length > 0){
-      issues.push("リンク異常: 対象リンクで別窓（target=\"_blank\"）になっていないものが " + nonBlankLinks.length + " 件あります");
+      issues.push("リンク異常: 本文内のaタグリンクで別窓（target=\"_blank\"）になっていないものが " + nonBlankLinks.length + " 件あります");
     }
 
     // 結果表示
     let msg = "【楽天ブログ判定結果】\n";
     if(missing.length === 0 && issues.length === 0){
-      msg += "✅ 問題なし（全11項目・冒頭画像・カテゴリ・AIコード・対象リンク別窓正常: " + targetAnchors.length + "件検知）";
+      msg += "✅ 問題なし（全11項目・冒頭画像・カテゴリ・AIコード・対象URL正常検出: " + finalUrlList.length + "件検知）";
     } else {
       msg += "❌ 要修正\n\n";
       if(missing.length > 0) msg += "■ 不足要素:\n・" + missing.join("\n・") + "\n\n";
@@ -102,8 +106,8 @@
 
     alert(msg);
 
-    if(targetAnchors.length > 0 && confirm("検出された対象リンク（" + targetAnchors.length + "件）をすべて別タブで開いて確認しますか？")){
-      targetAnchors.forEach(a => window.open(a.href, '_blank'));
+    if(finalUrlList.length > 0 && confirm("検出された対象リンク（" + finalUrlList.length + "件）をすべて別タブで開いて確認しますか？")){
+      finalUrlList.forEach(url => window.open(url, '_blank'));
     }
 
   } catch(err) {
