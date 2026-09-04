@@ -14,16 +14,15 @@
     // 2. 本文エリアの特定
     const b = document.querySelector('.real_entry_body, #entry_body, .dText, .entry_body, .entry-content');
     if(!b) {
-      alert("エラー: 本文エリア（.real_entry_body 等）が見つかりません。公開記事ページで実行してください。");
+      alert("エラー: 本文エリアが見つかりません。公開記事ページで実行してください。");
       return;
     }
 
     // 3. 冒頭画像チェック
-    const firstImg = b.querySelector('img');
-    if(!firstImg) missing.push("冒頭画像（本文内に画像が見つかりません）");
+    if(!b.querySelector('img')) missing.push("冒頭画像（本文内に画像が見つかりません）");
 
     // 4. タイトル地名チェック
-    if(txt && (/^(北海道|青森県|岩手県|宮城県|秋田県|山形県|福島県|茨城県|栃木県|群馬県|埼玉県|千葉県|東京都|神奈川県|新潟県|富山県|石川県|福井県|山梨県|長野県|岐阜県|静岡県|愛知県|三重県|滋賀県|京都府|大阪府|兵庫県|奈良県|和歌山県|鳥取県|岛根県|岡山県|広島県|山口県|徳島県|香川県|愛媛県|高知県|福岡県|佐賀県|長崎県|熊本県|大分県|宮崎県|鹿児島県|沖縄県)/.test(txt) || /^.{1,5}[市区町村]/.test(txt))){
+    if(txt && (/^(北海道|青森県|岩手県|宮城県|秋田県|山形県|福島県|茨城県|栃木県|群馬県|埼玉県|千葉県|東京都|神奈川県|新潟県|富山県|石川県|福井県|山梨県|長野県|岐阜県|静岡県|愛知県|三重県|滋賀県|京都府|大阪府|兵庫県|奈良県|和歌山県|鳥取県|島根県|岡山県|広島県|山口県|徳島県|香川県|愛媛県|高知県|福岡県|佐賀県|長崎県|熊本県|大分県|宮崎県|鹿児島県|沖縄県)/.test(txt) || /^.{1,5}[市区町村]/.test(txt))){
       issues.push("タイトル異常: 先頭が地名（「" + txt.substring(0,8) + "…」）");
     }
 
@@ -68,7 +67,7 @@
       }
     }
 
-    // 10. 本文エリア（b）からの外部リンク抽出＆重複排除
+    // 10. 本文エリア（b）からの外部リンク抽出（完全重複排除）
     let collectedUrls = [];
     let targetAnchors = [];
 
@@ -99,7 +98,7 @@
       } catch(e){}
     });
 
-    // 重複を1つに統合
+    // 完全な重複排除
     const finalUrlList = Array.from(new Set(collectedUrls));
 
     // 別窓（target="_blank"）チェック
@@ -132,15 +131,11 @@
 
     alert(msg);
 
-    // リンクの一括展開
+    // リンクの一括展開（無理な変換を行わず素直にそのまま開く）
     if(finalUrlList.length > 0 && confirm("検出された上記の対象リンク（" + finalUrlList.length + "件）をすべて別タブで開いて確認しますか？")){
       setTimeout(function(){
         finalUrlList.forEach(function(url){
-          let openTarget = url;
-          if(url.includes('maps.app.goo.gl') || url.includes('goo.gl/maps')){
-            openTarget = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(url);
-          }
-          window.open(openTarget, '_blank');
+          window.open(url, '_blank');
         });
       }, 100);
     }
