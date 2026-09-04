@@ -3,15 +3,19 @@
     const r = ["基本情報","店舗概要","所在地・アクセス","営業時間・定休日","サービス","設備","店舗情報一覧","まとめ","FAQ","編集部コメント","Googleマップ"];
     let m = [], l = [];
     
-    const txt = document.querySelector('h1, .heading-1, [class*="title"]') ? document.querySelector('h1, .heading-1, [class*="title"]').innerText.trim() : "";
+    // タイトル取得
+    const txtEl = document.querySelector('h1, .heading-1, [class*="title"]');
+    const txt = txtEl ? txtEl.innerText.trim() : "";
     if(!txt) m.push("記事タイトル");
     
+    // 本文取得
     const b = document.querySelector('main, article, .article-body, [class*="content"]') || document.body;
     const firstImg = b.querySelector('img');
     if(!firstImg) {
       m.push("冒頭画像（本文内に画像が見つかりません）");
     }
     
+    // 地名チェック
     if(txt && (/^(北海道|青森県|岩手県|宮城県|秋田県|山形県|福島県|茨城県|栃木県|群馬県|埼玉県|千葉県|東京都|神奈川県|新潟県|富山県|石川県|福井県|山梨県|長野県|岐阜県|静岡県|愛知県|三重県|滋賀県|京都府|大阪府|兵庫県|奈良県|和歌山県|鳥取県|島根県|岡山県|広島県|山口県|徳島県|香川県|愛媛県|高知県|福岡県|佐賀県|長崎県|熊本県|大分県|宮崎県|鹿児島県|沖縄県)/.test(txt) || /^.{1,5}[市区町村]/.test(txt))){
       l.push("タイトル異常: 先頭が地名（「" + txt.substring(0,8) + "…」）");
     }
@@ -69,6 +73,6 @@
       links.forEach(a => window.open(a.href, '_blank'));
     }
   } catch(e) {
-    alert("エラー: " + e.message);
+    alert("エラーが発生しました: " + e.message);
   }
 })();
