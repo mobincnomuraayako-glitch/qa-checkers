@@ -61,14 +61,14 @@
       }
     });
 
-    // 店舗情報一覧・編集部コメントの直近要素リンク
-    const headings = Array.from(b.querySelectorAll('h1, h2, h3, h4, h5, strong, b'));
+    // 正確な見出し要素のみを探索（純粋なh1〜h5タグまたは見出し専用クラス）
+    const headings = Array.from(b.querySelectorAll('h1, h2, h3, h4, h5, [class*="heading"], [class*="title"]'));
     headings.forEach(h => {
       const t = (h.innerText || '').trim();
-      if(t.includes('店舗情報一覧') || t.includes('編集部コメント')){
+      if(t === '店舗情報一覧' || t === '編集部コメント' || t.includes('店舗情報一覧') || t.includes('編集部コメント')){
         let next = h.nextElementSibling;
         let count = 0;
-        while(next && count < 5){
+        while(next && count < 3){
           if(next.tagName === 'A'){
             rawTargetLinks.push(next);
           } else {
