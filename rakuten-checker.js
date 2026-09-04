@@ -11,7 +11,7 @@
     const txt = txtEl ? txtEl.innerText.trim() : "";
     if(!txt) missing.push("記事タイトル");
 
-    // 2. 本文エリアの特定
+    // 2. 本文エリアの特定（.real_entry_body 等）
     const b = document.querySelector('.real_entry_body, #entry_body, .dText, .entry_body, .entry-content');
     if(!b) {
       alert("エラー: 記事本文エリア（.real_entry_body 等）が見つかりません。公開ページで実行してください。");
@@ -43,7 +43,7 @@
       issues.push("AI参照コード混入疑い: 「cit_...」「context」等のAIコード・属性が検出されました");
     }
 
-    // 8. AI「入力」不適切回答チェック（Q&A等のミス回答対策）
+    // 8. AI「入力」不適切回答チェック
     const mainText = b.innerText || "";
     const aiPatterns = ["入力されています", "入力情報では", "入力されていません", "入力情報"];
     let foundAiWords = [];
@@ -68,19 +68,21 @@
       }
     }
 
-    // 10. 本文エリア（b）からの外部リンク抽出
+    // 10. 本文エリア（b）からの厳格な外部リンク抽出（楽天ドメインは完全遮断）
     let targetUrls = new Set();
     let targetAnchors = [];
 
     // A: <a> タグ経由
     const anchors = Array.from(b.querySelectorAll('a'));
     anchors.forEach(a => {
-      const rawHref = a.getAttribute('href') || a.href || '';
+      // getAttribute('href') を優先取得し、相対パスやJavaScriptリンクを完全に排除
+      const rawHref = a.getAttribute('href') || '';
       if(!rawHref.startsWith('http://') && !rawHref.startsWith('https://')) return;
 
       try {
         const u = new URL(rawHref);
-        if(!u.hostname.includes('rakuten.co.jp') && !u.hostname.includes('rakuten.ne.jp')){
+        // rakuten を含むドメインをすべて除外（マイページ遷移防止）
+        if(!u.hostname.includes('rakuten')){
           targetUrls.add(rawHref);
           targetAnchors.push(a);
         }
@@ -93,7 +95,7 @@
       let clean = url.replace(/&amp;/g, '&').replace(/[\s\)\>\]]+$/, '');
       try {
         const u = new URL(clean);
-        if(!u.hostname.includes('rakuten.co.jp') && !u.hostname.includes('rakuten.ne.jp')){
+        if(!u.hostname.includes('rakuten')){
           targetUrls.add(clean);
         }
       } catch(e){}
@@ -123,7 +125,9 @@
     }
 
     if(finalUrlList.length > 0) {
-      msg += "【検出されたリンク一覧】\n・" + finalUrlList.join("\n・");
+      msg += "【検出された外部リンク一覧】\n・" + finalUrlList.join("\n・");
+    } else {
+      msg += "【検出された外部リンク】\n・対象の外部リンクなし";
     }
 
     alert(msg);
