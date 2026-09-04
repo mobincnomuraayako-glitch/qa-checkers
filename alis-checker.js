@@ -11,8 +11,8 @@
     const txt = txtEl ? txtEl.innerText.trim() : "";
     if(!txt) missing.push("記事タイトル");
 
-    // 2. 冒頭画像チェック
-    const b = document.querySelector('.article-body, .article-content, article') || document.body;
+    // 2. 冒頭画像＆本文エリア指定
+    const b = document.querySelector('.article-body, .article-content, .area-content, [class*="article"], [class*="content"], article, main') || document.body;
     const firstImg = b ? b.querySelector('img') : null;
     if(!firstImg) missing.push("冒頭画像（本文内に画像が見つかりません）");
 
@@ -49,15 +49,15 @@
       }
     }
 
-    // 8. 外部リンク・別窓（target="_blank"）チェック
+    // 8. 外部リンク・別窓（target="_blank"）チェック（SNSシェアボタン排除）
     const currentHost = location.hostname;
-    const allLinks = b ? Array.from(b.querySelectorAll('a')) : [];
-    const extLinks = allLinks.filter(a => {
+    const rawLinks = Array.from(b.querySelectorAll('a'));
+    const extLinks = rawLinks.filter(a => {
       const h = a.getAttribute('href') || '';
       if(!h.startsWith('http')) return false;
       try {
         const u = new URL(h);
-        return u.hostname !== currentHost;
+        return u.hostname !== currentHost && !u.hostname.includes('twitter.com') && !u.hostname.includes('x.com') && !u.hostname.includes('facebook.com');
       } catch(e) {
         return false;
       }
