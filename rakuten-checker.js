@@ -11,11 +11,16 @@
     const txt = txtEl ? txtEl.innerText.trim() : "";
     if(!txt) missing.push("記事タイトル");
 
-    // 2. 本文エリアの特定（div.dText）
-    const b = document.querySelector('.dText, .break-word, .real_entry_body, .entry_body, #entry_body') || document.body;
+    // 2. 本文エリア（.dText）の厳格な特定
+    // 管理画面枠を完全に除外するため、.dTextまたは実際の記事本文枠のみをターゲットにする
+    const b = document.querySelector('.dText, .real_entry_body, .entry_body');
+    if(!b) {
+      alert("エラー: 記事本文エリア（.dText）が見つかりません。公開ページまたはプレビュー画面で実行してください。");
+      return;
+    }
 
     // 3. 冒頭画像チェック
-    const firstImg = b ? b.querySelector('img') : null;
+    const firstImg = b.querySelector('img');
     if(!firstImg) missing.push("冒頭画像（本文内に画像が見つかりません）");
 
     // 4. タイトル地名チェック
@@ -51,37 +56,34 @@
       }
     }
 
-    // 9. 本文エリアからの対象URL抽出（完全外部ドメインのみ厳しく判定）
-    const currentHost = location.hostname;
+    // 9. 本文エリア（b）内部限定の外部リンク抽出
     let targetUrls = new Set();
     let targetAnchors = [];
 
-    // A: <a> タグ経由
+    // A: 本文内の <a> タグから抽出（楽天関連ドメインは完全排除）
     const anchors = Array.from(b.querySelectorAll('a'));
     anchors.forEach(a => {
-      if(a.closest('#side, .side, #sidebar, .sidebar, #footer, .footer, .nav, .menu')) return;
-      
       const rawHref = a.getAttribute('href') || '';
-      // 相対パス（/entry/...等）や自ドメインを完全に無視
       if(!rawHref.startsWith('http://') && !rawHref.startsWith('https://')) return;
 
       try {
         const u = new URL(rawHref);
-        if(u.hostname !== currentHost && !u.hostname.includes('plaza.rakuten.co.jp')){
+        // rakuten ドメイン全般（管理画面・ブログTOP・画像直リンク）を除外
+        if(!u.hostname.includes('rakuten.co.jp') && !u.hostname.includes('rakuten.ne.jp')){
           targetUrls.add(rawHref);
           targetAnchors.push(a);
         }
       } catch(e){}
     });
 
-    // B: 直書きテキスト経由（https://〜）
+    // B: 本文（b）の直書きテキスト（https://...）から抽出
     const bText = b.innerText || "";
     const rawMatches = bText.match(/https?:\/\/[^\s\<\>"\']+/g) || [];
     rawMatches.forEach(url => {
       let clean = url.replace(/&amp;/g, '&').replace(/[\s\)\>\]]+$/, '');
       try {
         const u = new URL(clean);
-        if(u.hostname !== currentHost && !u.hostname.includes('plaza.rakuten.co.jp')){
+        if(!u.hostname.includes('rakuten.co.jp') && !u.hostname.includes('rakuten.ne.jp')){
           targetUrls.add(clean);
         }
       } catch(e){}
@@ -103,16 +105,20 @@
     // 結果表示
     let msg = "【楽天ブログ判定結果】\n";
     if(missing.length === 0 && issues.length === 0){
-      msg += "✅ 問題なし（全11項目・冒頭画像・カテゴリ・AIコード・対象URL正常検出: " + finalUrlList.length + "件検知）";
+      msg += "✅ 問題なし（全11項目・冒頭画像・カテゴリ・AIコード・対象URL正常検出: " + finalUrlList.length + "件検知）\n\n";
     } else {
       msg += "❌ 要修正\n\n";
       if(missing.length > 0) msg += "■ 不足要素:\n・" + missing.join("\n・") + "\n\n";
-      if(issues.length > 0) msg += "■ 異常検出:\n・" + issues.join("\n・") + "\n";
+      if(issues.length > 0) msg += "■ 異常検出:\n・" + issues.join("\n・") + "\n\n";
+    }
+
+    if(finalUrlList.length > 0) {
+      msg += "【検出されたリンク一覧】\n・" + finalUrlList.join("\n・");
     }
 
     alert(msg);
 
-    if(finalUrlList.length > 0 && confirm("検出された対象リンク（" + finalUrlList.length + "件）をすべて別タブで開いて確認しますか？")){
+    if(finalUrlList.length > 0 && confirm("検出された上記の対象リンク（" + finalUrlList.length + "件）をすべて別タブで開いて確認しますか？")){
       setTimeout(() => {
         finalUrlList.forEach(url => window.open(url, '_blank'));
       }, 100);
