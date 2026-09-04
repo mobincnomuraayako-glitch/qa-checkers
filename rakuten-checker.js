@@ -11,7 +11,7 @@
     const txt = txtEl ? txtEl.innerText.trim() : "";
     if(!txt) missing.push("記事タイトル");
 
-    // 2. 本文エリアの特定
+    // 2. 本文エリアの特定（div.dText）
     const b = document.querySelector('.dText, .break-word, .real_entry_body, .entry_body') || document.body;
 
     // 3. 冒頭画像チェック
@@ -51,39 +51,29 @@
       }
     }
 
-    // 9. 対象リンク抽出（Googleマップ ＆ 編集部コメント/店舗情報一覧 直後のリンクのみ）
+    // 9. 本文エリア（.dText）内のリンク抽出
     const currentHost = location.hostname;
     let foundUrls = new Set();
     let targetAnchors = [];
 
-    // 本文内の全 HTML <a> タグを取得
     const allAnchors = Array.from(b.getElementsByTagName('a'));
 
     allAnchors.forEach(a => {
       const href = a.href || a.getAttribute('href') || '';
       if(!href.startsWith('http')) return;
-      
-      // 自ドメイン除外
+
       try {
         if(new URL(href).hostname === currentHost) return;
       } catch(e) { return; }
 
-      // 条件1: Googleマップリンク
+      // ① Googleマップリンク
       const isMap = href.includes('maps.google') || href.includes('goo.gl/maps') || href.includes('google.com/maps') || href.includes('maps.app.goo.gl');
-      
-      // 条件2: 編集部コメントまたは店舗情報一覧の領域内にあるリンク
-      let isTargetArea = false;
-      let parent = a.parentElement;
-      for(let i = 0; i < 5 && parent; i++){
-        const pText = parent.innerText || '';
-        if(pText.includes('編集部コメント') || pText.includes('店舗情報一覧')){
-          isTargetArea = true;
-          break;
-        }
-        parent = parent.parentElement;
-      }
 
-      if((isMap || isTargetArea) && !foundUrls.has(href)){
+      // ② 店舗情報・編集部コメント・または本文内にある外部公式サイトなどのリンク
+      // (サイドバー・フッター・ナビ・ランキング要素は完全除外)
+      const isSideOrFooter = a.closest('#side, .side, #sidebar, .sidebar, #footer, .footer, .nav, .menu, [class*="side"], [class*="footer"]');
+
+      if((isMap || !isSideOrFooter) && !foundUrls.has(href)){
         foundUrls.add(href);
         targetAnchors.push(a);
       }
