@@ -11,8 +11,8 @@
     const txt = txtEl ? txtEl.innerText.trim() : "";
     if(!txt) missing.push("記事タイトル");
 
-    // 2. 本文エリアの特定（div.dText）
-    const b = document.querySelector('.dText, .break-word, .real_entry_body, .entry_body') || document.body;
+    // 2. 本文エリアの特定（親要素を柔軟に検索）
+    const b = document.querySelector('.dText, .break-word, .real_entry_body, .entry_body, #entry_body') || document.body;
 
     // 3. 冒頭画像チェック
     const firstImg = b ? b.querySelector('img') : null;
@@ -51,44 +51,46 @@
       }
     }
 
-    // 9. 本文エリア（.dText）内のURL抽出（aタグ ＋ 直書きURL文字列）
+    // 9. 本文エリアからの全方式（aタグ / href属性 / 生テキスト）のURL一括抽出
     const currentHost = location.hostname;
     let targetUrls = new Set();
-    let nonBlankLinks = [];
+    let targetAnchors = [];
 
-    // ① 本文内の a タグから抽出
-    const allAnchors = Array.from(b.getElementsByTagName('a'));
-    allAnchors.forEach(a => {
-      const href = a.href || a.getAttribute('href') || '';
-      if(!href.startsWith('http')) return;
-      try {
-        if(new URL(href).hostname === currentHost) return;
-      } catch(e) { return; }
-
-      targetUrls.add(href);
-
-      // 別窓チェック
-      const t = (a.target || a.getAttribute('target') || '').toLowerCase();
-      const r = (a.getAttribute('rel') || '').toLowerCase();
-      if(t !== '_blank' && !r.includes('noopener') && !r.includes('blank')){
-        nonBlankLinks.push(a);
+    // 方法A: 本文内の <a> タグを全網羅
+    const anchors = Array.from(b.querySelectorAll('a'));
+    anchors.forEach(a => {
+      const h = a.href || a.getAttribute('href') || '';
+      if(h.startsWith('http')){
+        try {
+          if(new URL(h).hostname !== currentHost){
+            targetUrls.add(h);
+            targetAnchors.push(a);
+          }
+        } catch(e){}
       }
     });
 
-    // ② 本文テキスト内の直書きURL（https://...）を正規表現で抽出
-    const bText = b.innerText || "";
-    const matchedUrls = bText.match(/https?:\/\/[^\s\<\>"\']+/g) || [];
-    matchedUrls.forEach(url => {
-      // 末尾の記号などを除去
-      const cleanUrl = url.replace(/[\)\.\,]+$/, '');
+    // 方法B: 本文（b）のHTMLおよびテキスト全体から直接URLを抽出（直書き対策）
+    const bHtml = b.innerHTML || "";
+    const rawMatches = bHtml.match(/https?:\/\/[^\s\<\>"\']+/g) || [];
+    rawMatches.forEach(url => {
+      // 特殊記号やゴミをカット
+      let clean = url.replace(/&amp;/g, '&').replace(/[\)\.\,]+$/, '');
       try {
-        if(new URL(cleanUrl).hostname !== currentHost){
-          targetUrls.add(cleanUrl);
+        if(new URL(clean).hostname !== currentHost){
+          targetUrls.add(clean);
         }
-      } catch(e) {}
+      } catch(e){}
     });
 
     const finalUrlList = Array.from(targetUrls);
+
+    // 別窓（target="_blank"）チェック
+    let nonBlankLinks = targetAnchors.filter(a => {
+      const t = (a.target || a.getAttribute('target') || '').toLowerCase();
+      const r = (a.getAttribute('rel') || '').toLowerCase();
+      return t !== '_blank' && !r.includes('noopener') && !r.includes('blank');
+    });
 
     if(nonBlankLinks.length > 0){
       issues.push("リンク異常: 本文内のaタグリンクで別窓（target=\"_blank\"）になっていないものが " + nonBlankLinks.length + " 件あります");
