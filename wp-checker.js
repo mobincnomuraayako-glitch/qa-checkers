@@ -5,29 +5,38 @@
     
     const mainContent = document.querySelector('.entry-content, .post-content, .article-body, .entry-body') || document.body;
     
-    // 1. 本文内リンクの抽出（通常リンク）
+    // 1. Googleマップ要素の検出
+    const gmapIframe = mainContent.querySelector('iframe[src*="google.com/maps"]');
+    const gmapAnchor = mainContent.querySelector('a[href*="google.com/maps"], a[href*="maps.app.goo.gl"], a[href*="goo.gl/maps"]');
+
+    // 2. 本文内リンクの抽出（マップ内リンク・Googleマップ用URLを完全に排除）
     const allLinks = Array.from(mainContent.querySelectorAll('a')).filter(a => {
       const h = a.getAttribute('href');
       if (!h || h.startsWith('#') || h.startsWith('javascript:') || h.startsWith('mailto:') || h.startsWith('tel:')) return false;
+      
+      // ヘッダー・サイドバー・フッター等を除外
       if (a.closest('header, footer, nav, aside, #wpadminbar, .sidebar, .widget, .entry-categories, .cat-links, .entry-meta, .related-posts, .post-navigation, .breadcrumb')) return false;
       
-      // Googleマップ内の内部細部リンク（拡大ボタン等）のみ除外
-      if (a.closest('[class*="map"], [id*="map"]') && (h.includes('javascript') || h === '#')) return false;
+      // マップ枠内（iframe内やmap要素内）のリンクを完全無視
+      if (a.closest('iframe, [class*="map"], [id*="map"], .ggmap, .google-map')) return false;
+      
+      // Googleマップ自体のURLは通常リンクから排除（後でマップ専用として1件だけ追加するため）
+      if (h.includes('google.com/maps') || h.includes('maps.google.com') || h.includes('goo.gl/maps') || h.includes('maps.app.goo.gl')) return false;
       
       return true;
     });
 
-    // 2. タイトルチェック
+    // 3. タイトルチェック
     const txt = document.querySelector('.entry-title, h1.post-title, h1') ? document.querySelector('.entry-title, h1.post-title, h1').innerText.trim() : "";
     if (!txt) m.push("記事タイトル");
 
-    // 3. アイキャッチ画像チェック
+    // 4. アイキャッチ画像チェック
     const eyecatch = document.querySelector('.post-thumbnail img, .eyecatch img, header img, .wp-post-image, .attachment-post-thumbnail');
     if (!eyecatch) {
       m.push("アイキャッチ画像（未設定または取得不可）");
     }
 
-    // 4. タイトル地名チェック
+    // 5. タイトル地名チェック
     if (txt && (/^(北海道|青森県|岩手県|宮城県|秋田県|山形県|福島県|茨城県|栃木県|群馬県|埼玉県|千葉県|東京都|神奈川県|新潟県|富山県|石川県|福井県|山梨県|長野県|岐阜県|静岡県|愛知県|三重県|滋賀県|京都府|大阪府|兵庫県|奈良県|和歌山県|鳥取県|島根県|岡山県|広島県|山口県|徳島県|香川県|愛媛県|高知県|福岡県|佐賀県|長崎県|熊本県|大分県|宮崎県|鹿児島県|沖縄県)/.test(txt) || /^.{1,5}[市区町村]/.test(txt))) {
       l.push("タイトル異常: 先頭が地名（「" + txt.substring(0,8) + "…」）");
     }
@@ -35,20 +44,17 @@
     const pageText = document.body.innerText || "";
     const fullHtml = document.body.innerHTML || "";
 
-    // 5. カテゴリチェック
+    // 6. カテゴリチェック
     const hasCategoryEl = !!document.querySelector('.entry-categories, .cat-links, [class*="category"]');
     const hasCategoryText = pageText.includes("カテゴリ") || hasCategoryEl;
     if (!hasCategoryText || pageText.includes("カテゴリ：未分類") || pageText.includes("カテゴリ : 未分類")) {
       m.push("カテゴリ（設定なしまたは未分類）");
     }
 
-    // 6. 必須要素チェック
+    // 7. 必須要素チェック
     r.forEach(i => {
       if (i === "Googleマップ") {
-        const hasGmapText = pageText.includes("Googleマップ");
-        const hasGmapIframe = !!mainContent.querySelector('iframe[src*="google.com/maps"]');
-        const hasGmapUrl = /https?:\/\/(goo\.gl\/maps|maps\.app\.goo\.gl|www\.google\.[a-z]+\/maps)/.test(fullHtml);
-        if (!hasGmapText && !hasGmapIframe && !hasGmapUrl) {
+        if (!pageText.includes("Googleマップ") && !gmapIframe && !gmapAnchor) {
           m.push("Googleマップ（埋め込み・リンク・記述なし）");
         }
       } else {
@@ -56,18 +62,18 @@
       }
     });
 
-    // 7. 画像キャプション検出
+    // 8. 画像キャプション検出
     const captions = Array.from(mainContent.querySelectorAll('figcaption, .wp-caption-text, .wp-element-caption, .blocks-gallery-item__caption')).filter(c => c.innerText.trim() !== "");
     if (captions.length > 0) {
       l.push("画像キャプション検出: 本文内の画像にキャプション（注記テキスト）が " + captions.length + " 件入力されています");
     }
 
-    // 8. AIコンテキストコード混入チェック
+    // 9. AIコンテキストコード混入チェック
     if (/cit_[a-zA-Z0-9_-]{5,}/.test(fullHtml) || /data-cit/.test(fullHtml) || /googleapis\.com\/v[0-9]/.test(fullHtml) || /citation/.test(fullHtml)) {
       l.push("AIコンテキストコード混入: 「cit_...」等の出典コード・属性が検出されました");
     }
 
-    // 9. AI不適切回答チェック
+    // 10. AI不適切回答チェック
     const mainText = mainContent.innerText || "";
     const aiPatterns = ["入力されています", "入力情報では", "入力されていません", "入力情報"];
     let foundAiWords = [];
@@ -80,7 +86,7 @@
       l.push("AI異常文言検出: 本文/Q&A内に「" + foundAiWords.join("」「") + "」が含まれています");
     }
 
-    // 10. 編集部コメント内の複数リンクチェック（ピンポイント判定）
+    // 11. 編集部コメント内の複数リンクチェック（ピンポイント判定）
     let editorCommentHeader = null;
     const headings = Array.from(mainContent.querySelectorAll('h1, h2, h3, h4, h5, h6, div, p'));
     for (let el of headings) {
@@ -116,29 +122,27 @@
       }
     }
 
-    // 11. リンク抽出処理（通常リンク ＋ GoogleマップURL）
+    // 12. リンク統合処理（重複排除＋Googleマップ1件のみ追加）
     let displayUrls = [];
     let openUrls = [];
 
+    // 通常の本文リンクを追加
     allLinks.forEach(a => {
       const href = a.getAttribute('href');
-      if (href && !href.includes('google.com/maps') && !href.includes('maps.google.com') && !href.includes('goo.gl/maps')) {
+      if (href) {
         displayUrls.push(href);
         openUrls.push(href);
       }
     });
 
-    // Googleマップの抽出（iframeのsrcまたはマップリンク）
-    const gmapIframe = mainContent.querySelector('iframe[src*="google.com/maps"]');
-    const gmapAnchor = mainContent.querySelector('a[href*="google.com/maps"], a[href*="maps.app.goo.gl"], a[href*="goo.gl/maps"]');
-
+    // Googleマップ用URLを厳選して1件だけ追加
     if (gmapIframe) {
       const mapSrc = gmapIframe.getAttribute('src');
-      displayUrls.push(mapSrc);
+      displayUrls.push("[Googleマップ] " + mapSrc);
       openUrls.push(mapSrc);
     } else if (gmapAnchor) {
       const mapHref = gmapAnchor.getAttribute('href');
-      displayUrls.push(mapHref);
+      displayUrls.push("[Googleマップ] " + mapHref);
       openUrls.push(mapHref);
     }
 
@@ -154,14 +158,14 @@
 
     msg += "\n----------------------------------------\n";
     if (displayUrls.length > 0) {
-      msg += "【検出された対象URL（" + displayUrls.length + "件）】\n・" + displayUrls.join("\n・");
+      msg += "【検出されたURL（" + displayUrls.length + "件）】\n・" + displayUrls.join("\n・");
     } else {
-      msg += "【検出された対象URL】\n・なし";
+      msg += "【検出されたURL】\n・なし";
     }
 
     alert(msg);
 
-    // リンクの一括展開（Googleマップ含む全件）
+    // リンクの一括展開
     if (openUrls.length > 0 && confirm("検出されたURL（Googleマップ含む " + openUrls.length + "件）をすべて別タブで開きますか？")) {
       setTimeout(() => {
         openUrls.forEach(url => {
