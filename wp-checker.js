@@ -5,7 +5,7 @@
     
     const mainContent = document.querySelector('.entry-content, .post-content, .article-body, .entry-body') || document.body;
     
-    // 1. 本文内リンクの抽出
+    // 1. 本文内リンクの抽出（重複排除しない）
     const allLinks = Array.from(mainContent.querySelectorAll('a')).filter(a => {
       const h = a.getAttribute('href');
       if (!h || h.startsWith('#') || h.startsWith('javascript:') || h.startsWith('mailto:') || h.startsWith('tel:')) return false;
@@ -63,7 +63,7 @@
       l.push("AIコンテキストコード混入: 「cit_...」等の出典コード・属性が検出されました");
     }
 
-    // 9. AI不適切回答チェック（入力不適切文言）
+    // 9. AI不適切回答チェック
     const mainText = mainContent.innerText || "";
     const aiPatterns = ["入力されています", "入力情報では", "入力されていません", "入力情報"];
     let foundAiWords = [];
@@ -76,18 +76,42 @@
       l.push("AI異常文言検出: 本文/Q&A内に「" + foundAiWords.join("」「") + "」が含まれています");
     }
 
-    // 10. 外部リンク抽出＆重複排除
-    let collectedUrls = [];
+    // 10. 編集部コメント内の複数リンクチェック（2つ以上でNG）
+    const editorCommentNodes = Array.from(mainContent.querySelectorAll('*')).filter(el => {
+      return el.children.length === 0 && el.innerText.includes('編集部コメント');
+    });
+    if (editorCommentNodes.length > 0) {
+      const editorSection = editorCommentNodes[0].closest('div, section, article') || editorCommentNodes[0].parentElement;
+      if (editorSection) {
+        const editorLinks = editorSection.querySelectorAll('a[href]');
+        if (editorLinks.length >= 2) {
+          l.push("編集部コメント内重複リンク異常: リンクが " + editorLinks.length + " 件（2件以上）設定されています");
+        }
+      }
+    }
+
+    // 11. リンク抽出処理（重複排除なし・マップ表示用追加）
+    let displayUrls = [];
+    let openUrls = [];
+
     allLinks.forEach(a => {
       const href = a.getAttribute('href');
-      if (href) collectedUrls.push(href);
+      if (href) {
+        displayUrls.push(href);
+        openUrls.push(href);
+      }
     });
-    const finalUrlList = Array.from(new Set(collectedUrls));
+
+    // iframeのGoogleマップも検出して一覧に表示
+    const gmapIframe = mainContent.querySelector('iframe[src*="google.com/maps"]');
+    if (gmapIframe) {
+      displayUrls.push("Googleマップ（iframe埋め込み）");
+    }
 
     // 結果出力
     let msg = "【WordPress WP判定結果】\n\n";
     if (m.length === 0 && l.length === 0) {
-      msg += "✅ 問題なし（全項目・アイキャッチ・AIコード・AI不適切文言正常）\n";
+      msg += "✅ 問題なし（全項目・アイキャッチ・AIコード・重複リンク等 正常）\n";
     } else {
       msg += "❌ 要修正\n";
       if (m.length > 0) msg += "\n■ 不足要素:\n・" + m.join("\n・") + "\n";
@@ -95,18 +119,18 @@
     }
 
     msg += "\n----------------------------------------\n";
-    if (finalUrlList.length > 0) {
-      msg += "【検出された本文内リンク（" + finalUrlList.length + "件）】\n・" + finalUrlList.join("\n・");
+    if (displayUrls.length > 0) {
+      msg += "【検出された本文内リンク（" + displayUrls.length + "件）】\n・" + displayUrls.join("\n・");
     } else {
       msg += "【検出された本文内リンク】\n・なし";
     }
 
     alert(msg);
 
-    // リンクの一括展開
-    if (finalUrlList.length > 0 && confirm("検出された上記の対象リンク（" + finalUrlList.length + "件）をすべて別タブで開いて確認しますか？")) {
+    // リンクの一括展開（web URLのみ対象）
+    if (openUrls.length > 0 && confirm("検出された店舗URL（" + openUrls.length + "件）をすべて別タブで開いて確認しますか？")) {
       setTimeout(() => {
-        finalUrlList.forEach(url => {
+        openUrls.forEach(url => {
           window.open(url, '_blank');
         });
       }, 100);
