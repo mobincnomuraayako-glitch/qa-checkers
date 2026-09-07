@@ -5,9 +5,20 @@
     
     const mainContent = document.querySelector('.entry-content, .post-content, .article-body, .entry-body') || document.body;
     
-    // 1. Googleマップ要素の検出
+    // 1. Googleマップ要素の検出とピン判定
     const gmapIframe = mainContent.querySelector('iframe[src*="google.com/maps"]');
     const gmapAnchor = mainContent.querySelector('a[href*="google.com/maps"], a[href*="maps.app.goo.gl"], a[href*="goo.gl/maps"]');
+
+    // ピン（マーカー）の有無チェック関数
+    function hasMapPin(url) {
+      if (!url) return false;
+      // q=, query=, cid=, 座標指定(!3d, !4d) 等が含まれていればピンありと判定
+      return /[?&](q|query|cid)=/.test(url) || /!3d[-0-9.]*!4d[-0-9.]*/.test(url) || url.includes('maps.app.goo.gl');
+    }
+
+    let mapUrl = "";
+    if (gmapIframe) mapUrl = gmapIframe.getAttribute('src') || "";
+    else if (gmapAnchor) mapUrl = gmapAnchor.getAttribute('href') || "";
 
     // 2. タイトルチェック
     const txt = document.querySelector('.entry-title, h1.post-title, h1') ? document.querySelector('.entry-title, h1.post-title, h1').innerText.trim() : "";
@@ -34,11 +45,13 @@
       m.push("カテゴリ（設定なしまたは未分類）");
     }
 
-    // 6. 必須要素チェック
+    // 6. 必須要素チェック（Googleマップの存在 ＆ ピンチェック）
     r.forEach(i => {
       if (i === "Googleマップ") {
         if (!pageText.includes("Googleマップ") && !gmapIframe && !gmapAnchor) {
           m.push("Googleマップ（埋め込み・リンク・記述なし）");
+        } else if ((gmapIframe || gmapAnchor) && !hasMapPin(mapUrl)) {
+          m.push("Googleマップ（要素はあるがピン・地点が指定されていません）");
         }
       } else {
         if (!pageText.includes(i)) m.push(i);
@@ -72,7 +85,7 @@
     // 10. 各エリアからのURLピンポイント抽出（店舗情報・編集部コメント・マップ）
     let targetUrls = [];
 
-    // ① 店舗情報一覧エリアのURL（最初に見つかる1件）
+    // ① 店舗情報一覧エリアのURL
     let shopInfoUrl = null;
     const shopHeadings = Array.from(mainContent.querySelectorAll('h1, h2, h3, h4, h5, h6, div, p'));
     let shopHeader = shopHeadings.find(el => el.children.length === 0 && el.innerText.trim().includes('店舗情報一覧'));
@@ -89,7 +102,7 @@
       }
     }
 
-    // ② 編集部コメントエリアのURL（一意なURLを抽出し、2種類以上あればエラー判定）
+    // ② 編集部コメントエリアのURL
     let editorCommentHeader = shopHeadings.find(el => el.children.length === 0 && el.innerText.trim() === '編集部コメント');
     let editorUrlsSet = new Set();
     if (editorCommentHeader) {
@@ -108,21 +121,13 @@
       }
     }
 
-    // URLリストの組み立て（店舗情報 → 編集部コメント → Googleマップ）
+    // URLリストの組み立て
     if (shopInfoUrl) targetUrls.push({ name: "店舗情報一覧", url: shopInfoUrl });
-    
-    // 編集部コメントから1つ目のURLを採用
     const firstEditorUrl = Array.from(editorUrlsSet)[0];
     if (firstEditorUrl) targetUrls.push({ name: "編集部コメント", url: firstEditorUrl });
+    if (mapUrl) targetUrls.push({ name: "Googleマップ", url: mapUrl });
 
-    // ③ GoogleマップURL
-    if (gmapIframe) {
-      targetUrls.push({ name: "Googleマップ", url: gmapIframe.getAttribute('src') });
-    } else if (gmapAnchor) {
-      targetUrls.push({ name: "Googleマップ", url: gmapAnchor.getAttribute('href') });
-    }
-
-    // 結果出力メッセージの構築
+    // 結果出力メッセージ
     let msg = "【WordPress WP判定結果】\n\n";
     if (m.length === 0 && l.length === 0) {
       msg += "✅ 問題なし（全項目・アイキャッチ・AIコード・重複リンク等 正常）\n";
@@ -141,7 +146,7 @@
 
     alert(msg);
 
-    // 3つの確認URLを一括展開
+    // 一括展開
     if (targetUrls.length > 0 && confirm("確認対象のURL（" + targetUrls.length + "件）をすべて別タブで開きますか？")) {
       setTimeout(() => {
         targetUrls.forEach(item => {
