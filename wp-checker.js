@@ -60,4 +60,59 @@
 
     // 8. AIコンテキストコード混入チェック
     if (/cit_[a-zA-Z0-9_-]{5,}/.test(fullHtml) || /data-cit/.test(fullHtml) || /googleapis\.com\/v[0-9]/.test(fullHtml) || /citation/.test(fullHtml)) {
-      l.push("AIコンテキストコード混入: 「cit_...」等の出典属性
+      l.push("AIコンテキストコード混入: 「cit_...」等の出典コード・属性が検出されました");
+    }
+
+    // 9. AI不適切回答チェック（入力不適切文言）
+    const mainText = mainContent.innerText || "";
+    const aiPatterns = ["入力されています", "入力情報では", "入力されていません", "入力情報"];
+    let foundAiWords = [];
+    aiPatterns.forEach(pattern => {
+      if (mainText.includes(pattern)) {
+        foundAiWords.push(pattern);
+      }
+    });
+    if (foundAiWords.length > 0) {
+      l.push("AI異常文言検出: 本文/Q&A内に「" + foundAiWords.join("」「") + "」が含まれています");
+    }
+
+    // 10. 外部リンク抽出＆重複排除
+    let collectedUrls = [];
+    allLinks.forEach(a => {
+      const href = a.getAttribute('href');
+      if (href) collectedUrls.push(href);
+    });
+    const finalUrlList = Array.from(new Set(collectedUrls));
+
+    // 結果出力
+    let msg = "【WordPress WP判定結果】\n\n";
+    if (m.length === 0 && l.length === 0) {
+      msg += "✅ 問題なし（全項目・アイキャッチ・AIコード・AI不適切文言正常）\n";
+    } else {
+      msg += "❌ 要修正\n";
+      if (m.length > 0) msg += "\n■ 不足要素:\n・" + m.join("\n・") + "\n";
+      if (l.length > 0) msg += "\n■ 異常検出:\n・" + l.join("\n・") + "\n";
+    }
+
+    msg += "\n----------------------------------------\n";
+    if (finalUrlList.length > 0) {
+      msg += "【検出された本文内リンク（" + finalUrlList.length + "件）】\n・" + finalUrlList.join("\n・");
+    } else {
+      msg += "【検出された本文内リンク】\n・なし";
+    }
+
+    alert(msg);
+
+    // リンクの一括展開
+    if (finalUrlList.length > 0 && confirm("検出された上記の対象リンク（" + finalUrlList.length + "件）をすべて別タブで開いて確認しますか？")) {
+      setTimeout(() => {
+        finalUrlList.forEach(url => {
+          window.open(url, '_blank');
+        });
+      }, 100);
+    }
+
+  } catch(err) {
+    alert("実行時エラー: " + err.message);
+  }
+})();
