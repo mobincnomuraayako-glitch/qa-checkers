@@ -14,13 +14,8 @@
       const h = a.getAttribute('href');
       if (!h || h.startsWith('#') || h.startsWith('javascript:') || h.startsWith('mailto:') || h.startsWith('tel:')) return false;
       
-      // ヘッダー・サイドバー・フッター等を除外
       if (a.closest('header, footer, nav, aside, #wpadminbar, .sidebar, .widget, .entry-categories, .cat-links, .entry-meta, .related-posts, .post-navigation, .breadcrumb')) return false;
-      
-      // マップ枠内（iframe内やmap要素内）のリンクを完全無視
       if (a.closest('iframe, [class*="map"], [id*="map"], .ggmap, .google-map')) return false;
-      
-      // Googleマップ自体のURLは通常リンクから排除（後でマップ専用として1件だけ追加するため）
       if (h.includes('google.com/maps') || h.includes('maps.google.com') || h.includes('goo.gl/maps') || h.includes('maps.app.goo.gl')) return false;
       
       return true;
@@ -86,7 +81,7 @@
       l.push("AI異常文言検出: 本文/Q&A内に「" + foundAiWords.join("」「") + "」が含まれています");
     }
 
-    // 11. 編集部コメント内の複数リンクチェック（ピンポイント判定）
+    // 11. 編集部コメント内の複数「別URL」チェック（URL単位で重複排除）
     let editorCommentHeader = null;
     const headings = Array.from(mainContent.querySelectorAll('h1, h2, h3, h4, h5, h6, div, p'));
     for (let el of headings) {
@@ -98,7 +93,7 @@
 
     if (editorCommentHeader) {
       let current = editorCommentHeader.nextElementSibling;
-      let editorLinksCount = 0;
+      let editorUrls = new Set(); // 一意なURLのみを保持するSet
 
       while (current) {
         const tag = current.tagName.toLowerCase();
@@ -108,43 +103,50 @@
         }
 
         const linksInBlock = current.querySelectorAll('a[href]');
-        editorLinksCount += linksInBlock.length;
+        linksInBlock.forEach(a => {
+          const href = a.getAttribute('href');
+          if (href) editorUrls.add(href);
+        });
 
         if (tag === 'a' && current.hasAttribute('href')) {
-          editorLinksCount++;
+          editorUrls.add(current.getAttribute('href'));
         }
 
         current = current.nextElementSibling;
       }
 
-      if (editorLinksCount >= 2) {
-        l.push("編集部コメント内重複リンク異常: 編集部コメント内にリンクが " + editorLinksCount + " 件（2件以上）設定されています");
+      // 異なるURLが「2種類以上」存在する場合のみエラー判定
+      if (editorUrls.size >= 2) {
+        l.push("編集部コメント内複数URL異常: 異なるリンク先が " + editorUrls.size + " 件設定されています");
       }
     }
 
-    // 12. リンク統合処理（重複排除＋Googleマップ1件のみ追加）
-    let displayUrls = [];
-    let openUrls = [];
+    // 12. リンク統合処理（全体もURL単位で重複排除）
+    let displayUrlsSet = new Set();
+    let openUrlsSet = new Set();
 
     // 通常の本文リンクを追加
     allLinks.forEach(a => {
       const href = a.getAttribute('href');
       if (href) {
-        displayUrls.push(href);
-        openUrls.push(href);
+        displayUrlsSet.add(href);
+        openUrlsSet.add(href);
       }
     });
 
-    // Googleマップ用URLを厳選して1件だけ追加
+    // Googleマップ用URLを追加
     if (gmapIframe) {
       const mapSrc = gmapIframe.getAttribute('src');
-      displayUrls.push("[Googleマップ] " + mapSrc);
-      openUrls.push(mapSrc);
+      displayUrlsSet.add("[Googleマップ] " + mapSrc);
+      openUrlsSet.add(mapSrc);
     } else if (gmapAnchor) {
       const mapHref = gmapAnchor.getAttribute('href');
-      displayUrls.push("[Googleマップ] " + mapHref);
-      openUrls.push(mapHref);
+      displayUrlsSet.add("[Googleマップ] " + mapHref);
+      openUrlsSet.add(mapHref);
     }
+
+    const displayUrls = Array.from(displayUrlsSet);
+    const openUrls = Array.from(openUrlsSet);
 
     // 結果出力
     let msg = "【WordPress WP判定結果】\n\n";
@@ -166,7 +168,7 @@
     alert(msg);
 
     // リンクの一括展開
-    if (openUrls.length > 0 && confirm("検出されたURL（Googleマップ含む " + openUrls.length + "件）をすべて別タブで開きますか？")) {
+    if (openUrls.length > 0 && confirm("検出されたURL（" + openUrls.length + "件）をすべて別タブで開きますか？")) {
       setTimeout(() => {
         openUrls.forEach(url => {
           window.open(url, '_blank');
