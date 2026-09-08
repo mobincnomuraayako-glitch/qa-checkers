@@ -5,7 +5,7 @@
     
     const mainContent = document.querySelector('.entry-content, .post-content, .article-body, .entry-body') || document.body;
     
-    // 1. Googleマップ要素の検出（WP前提：iframe固定）
+    // 1. Googleマップ要素の検出
     const gmapIframe = mainContent.querySelector('iframe[src*="google.com/maps"], iframe[src*="maps.google"]');
     let mapUrl = gmapIframe ? (gmapIframe.getAttribute('src') || "") : "";
 
@@ -26,7 +26,7 @@
 
     // 4. タイトル地名チェック
     if (txt && (/^(北海道|青森県|岩手県|宮城県|秋田県|山形県|福島県|茨城県|栃木県|群馬県|埼玉県|千葉県|東京都|神奈川県|新潟県|富山県|石川県|福井県|山梨県|長野県|岐阜県|静岡県|愛知県|三重県|滋賀県|京都府|大阪府|兵庫県|奈良県|和歌山県|鳥取県|島根県|岡山県|広島県|山口県|徳島県|香川県|愛媛県|高知県|福岡県|佐賀県|長崎県|熊本県|大分県|宮崎県|鹿児島県|沖縄県)/.test(txt) || /^.{1,5}[市区町村]/.test(txt))) {
-      l.push("タイトル異常: 先頭が地名（「" + txt.substring(0,8) + "…」）");
+      l.push("タイトル異常: 先頭が地名");
     }
 
     const pageText = document.body.innerText || "";
@@ -81,7 +81,7 @@
     // ----------------------------------------------------
     let targetUrls = [];
 
-    // ① 店舗情報一覧エリアのURL（1個目）
+    // ① 店舗情報一覧エリアのURL
     let shopInfoUrl = null;
     const allEls = Array.from(mainContent.querySelectorAll('*'));
     let shopEl = allEls.find(el => el.children.length === 0 && el.innerText && el.innerText.trim().includes('店舗情報一覧'));
@@ -105,23 +105,20 @@
       }
     }
 
-    // ② 編集部コメントエリアのURL（2個目：mshots型カード＋HTML解析対応）
+    // ② 編集部コメントエリアのURL（mshotsデコード解読対応）
     let editorCommentUrl = null;
     let editorEl = allEls.find(el => el.children.length === 0 && el.innerText && el.innerText.trim().includes('編集部コメント'));
 
     if (editorEl) {
-      // 編集部コメントより下にある「blogcard」コンテナを取得
       const blogcards = Array.from(mainContent.querySelectorAll('.blogcard, .external-blogcard, [class*="blogcard"]'));
       let targetCard = blogcards.find(card => editorEl.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING);
 
       if (targetCard) {
-        // パターンA: 通常の <a> タグから抽出
         const aTag = targetCard.querySelector('a[href]');
         if (aTag && !aTag.getAttribute('href').includes('google.com/maps')) {
           editorCommentUrl = aTag.getAttribute('href').trim();
         }
 
-        // パターンB: mshots（サムネイルAPI画像）のsrcから埋め込みURLをデコードして抽出
         if (!editorCommentUrl) {
           const img = targetCard.querySelector('img[src*="mshots"]');
           if (img) {
@@ -133,7 +130,6 @@
           }
         }
 
-        // パターンC: カード内のHTML全文字列からURLっぽいものを強制抽出
         if (!editorCommentUrl) {
           const cardHtml = targetCard.innerHTML;
           const urlMatch = cardHtml.match(/https?%3A%2F%2F[^\s"'<>\n\r]+/i) || cardHtml.match(/https?:\/\/[^\s"'<>\n\r]+/i);
@@ -146,7 +142,6 @@
         }
       }
 
-      // パターンD: フォールバック（カードが見つからない場合の通常の探索）
       if (!editorCommentUrl) {
         const allAnchors = Array.from(mainContent.querySelectorAll('a[href]'));
         for (let a of allAnchors) {
@@ -166,12 +161,11 @@
     if (!editorCommentUrl) l.push("URL不足: 編集部コメント内の店舗URL（2件目）が見つかりません");
     if (!mapUrl) l.push("URL不足: Googleマップ（iframe）が見つかりません");
 
-    // URLリストの組み立て
     if (shopInfoUrl) targetUrls.push({ name: "店舗情報一覧", url: shopInfoUrl });
     if (editorCommentUrl) targetUrls.push({ name: "編集部コメント", url: editorCommentUrl });
     if (mapUrl) targetUrls.push({ name: "Googleマップ", url: mapUrl });
 
-    // 判定結果の出力
+    // 結果画面出力
     let msg = "【WordPress WP判定結果】\n\n";
     if (m.length === 0 && l.length === 0 && targetUrls.length === 3) {
       msg += "✅ 問題なし（店舗URL 2件 ＋ Gマップ 1件 正常検出）\n";
@@ -193,7 +187,6 @@
 
     alert(msg);
 
-    // 一括展開
     if (targetUrls.length > 0 && confirm("確認対象のURL（" + targetUrls.length + "件）をすべて別タブで開きますか？")) {
       setTimeout(() => {
         targetUrls.forEach(item => {
