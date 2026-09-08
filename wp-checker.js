@@ -83,34 +83,45 @@
 
     // ① 店舗情報一覧エリアのURL（1個目）
     let shopInfoUrl = null;
-    const h2List = Array.from(mainContent.querySelectorAll('h2, h3, h4'));
-    let shopHeader = h2List.find(el => el.innerText.trim().includes('店舗情報一覧'));
-    if (shopHeader) {
-      let cur = shopHeader.nextElementSibling;
-      while (cur) {
-        if (['H2','H3'].includes(cur.tagName) || cur.innerText.includes('まとめ')) break;
-        const link = cur.querySelector('a[href]');
-        if (link) {
-          const h = link.getAttribute('href');
-          if (h && !h.startsWith('#') && !h.includes('google.com/maps')) { shopInfoUrl = h; break; }
+    const allEls = Array.from(mainContent.querySelectorAll('*'));
+    let shopEl = allEls.find(el => el.children.length === 0 && el.innerText && el.innerText.trim().includes('店舗情報一覧'));
+    if (shopEl) {
+      let cur = shopEl.closest('h1,h2,h3,h4,div,section') || shopEl;
+      while (cur && cur !== mainContent) {
+        let p = cur.nextElementSibling || cur.parentElement;
+        if (p) {
+          const aList = Array.from(p.querySelectorAll('a[href]'));
+          if (p.tagName === 'A') aList.unshift(p);
+          for (let a of aList) {
+            const h = a.getAttribute('href');
+            if (h && !h.startsWith('#') && !h.includes('google.com/maps')) {
+              shopInfoUrl = h.trim();
+              break;
+            }
+          }
         }
+        if (shopInfoUrl) break;
         cur = cur.nextElementSibling;
       }
     }
 
-    // ② 編集部コメントエリアのURL（2個目：エリア全体を徹底スキャン）
+    // ② 編集部コメントエリアのURL（2個目：blogcardコンテナ直接解析対応）
     let editorCommentUrl = null;
-    let editorHeader = h2List.find(el => el.innerText.trim().includes('編集部コメント'));
+    let editorEl = allEls.find(el => el.children.length === 0 && el.innerText && el.innerText.trim().includes('編集部コメント'));
 
-    if (editorHeader) {
-      let cur = editorHeader.nextElementSibling;
-      while (cur) {
-        // 次の大きな見出し（H2/H3）が来たら探すのを終了
-        if (['H2','H3'].includes(cur.tagName)) break;
+    if (editorEl) {
+      // 編集部コメント見出しから次の「Googleマップ」見出しまでの要素をすべて巡回
+      let currentNode = editorEl.closest('h1,h2,h3,h4,p,div') || editorEl;
+      
+      while (currentNode) {
+        // 「Googleマップ」見出しに到達したら検索終了
+        if (currentNode !== editorEl && currentNode.innerText && currentNode.innerText.includes('Googleマップ')) {
+          break;
+        }
 
-        // エリア内のすべての <a> タグからリンクを探索
-        const links = Array.from(cur.querySelectorAll('a[href]'));
-        if (cur.tagName === 'A' && cur.getAttribute('href')) links.unshift(cur);
+        // 方法A: 画面キャプチャにある div.blogcard や <a> タグ内の href を探す
+        const links = Array.from(currentNode.querySelectorAll ? currentNode.querySelectorAll('a[href], .blogcard a, .external-blogcard a, [class*="blogcard"] a') : []);
+        if (currentNode.tagName === 'A' && currentNode.getAttribute('href')) links.unshift(currentNode);
 
         for (let a of links) {
           const h = a.getAttribute('href');
@@ -121,18 +132,25 @@
         }
         if (editorCommentUrl) break;
 
-        // 生テキストの判定
-        const rawMatch = (cur.innerText || "").match(/https?:\/\/[^\s\)\>\]"'＜＞「」\n\r]+/);
-        if (rawMatch) {
+        // 方法B: カードのデータ属性（data-url等）やテキスト直書きURLを拾う
+        if (currentNode.getAttribute && currentNode.getAttribute('data-url')) {
+          editorCommentUrl = currentNode.getAttribute('data-url').trim();
+          break;
+        }
+
+        const rawText = currentNode.innerText || "";
+        const rawMatch = rawText.match(/https?:\/\/[^\s\)\>\]"'＜＞「」\n\r]+/);
+        if (rawMatch && !rawMatch[0].includes('google.com/maps')) {
           editorCommentUrl = rawMatch[0].trim();
           break;
         }
 
-        cur = cur.nextElementSibling;
+        // 次の要素へ移動
+        currentNode = currentNode.nextElementSibling;
       }
     }
 
-    // 【URL不足判定】（3件揃っていなければ必ず「要修正」にする）
+    // 【URL不足判定】
     if (!shopInfoUrl) l.push("URL不足: 店舗情報一覧の店舗URL（1件目）が見つかりません");
     if (!editorCommentUrl) l.push("URL不足: 編集部コメント内の店舗URL（2件目）が見つかりません");
     if (!mapUrl) l.push("URL不足: Googleマップ（iframe）が見つかりません");
