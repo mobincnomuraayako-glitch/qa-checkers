@@ -9,7 +9,6 @@
     const gmapIframe = mainContent.querySelector('iframe[src*="google.com/maps"]');
     const gmapAnchor = mainContent.querySelector('a[href*="google.com/maps"], a[href*="maps.app.goo.gl"], a[href*="goo.gl/maps"]');
 
-    // ピン（マーカー）の有無チェック関数
     function hasMapPin(url) {
       if (!url) return false;
       return /[?&](q|query|cid)=/.test(url) || /!3d[-0-9.]*!4d[-0-9.]*/.test(url) || url.includes('maps.app.goo.gl');
@@ -44,7 +43,7 @@
       m.push("カテゴリ（設定なしまたは未分類）");
     }
 
-    // 6. 必須要素チェック（Googleマップの存在 ＆ ピンチェック）
+    // 6. 必須要素チェック
     r.forEach(i => {
       if (i === "Googleマップ") {
         if (!pageText.includes("Googleマップ") && !gmapIframe && !gmapAnchor) {
@@ -60,15 +59,15 @@
     // 7. 画像キャプション検出
     const captions = Array.from(mainContent.querySelectorAll('figcaption, .wp-caption-text, .wp-element-caption, .blocks-gallery-item__caption')).filter(c => c.innerText.trim() !== "");
     if (captions.length > 0) {
-      l.push("画像キャプション検出: 本文内の画像にキャプション（注記テキスト）が " + captions.length + " 件入力されています");
+      l.push("画像キャプション検出: 本文内の画像にキャプションが " + captions.length + " 件入力されています");
     }
 
     // 8. AIコンテキストコード混入チェック
     if (/cit_[a-zA-Z0-9_-]{5,}/.test(fullHtml) || /data-cit/.test(fullHtml) || /googleapis\.com\/v[0-9]/.test(fullHtml) || /citation/.test(fullHtml)) {
-      l.push("AIコンテキストコード混入: 「cit_...」等の出典コード・属性が検出されました");
+      l.push("AIコンテキストコード混入: 出典コード・属性が検出されました");
     }
 
-    // 9. AI不適切回答チェック（電話番号のハイフンを除外して判定）
+    // 9. AI不適切回答チェック（電話番号ハイフン除外）
     let cleanMainText = (mainContent.innerText || "").replace(/0\d{1,4}-\d{1,4}-\d{3,4}/g, "");
     const aiPatterns = ["入力されています", "入力情報では", "入力されていません", "入力情報", "「-」と入力", "は「-」"];
     let foundAiWords = [];
@@ -81,12 +80,12 @@
       l.push("AI異常文言検出: 本文/Q&A内に「" + Array.from(new Set(foundAiWords)).join("」「") + "」が含まれています");
     }
 
-    // 10. 各エリアからのURLピンポイント抽出（店舗情報・編集部コメント・マップ）
+    // 10. 各エリアからのURLピンポイント抽出 ＆ 生URL・ダブり判定
     let targetUrls = [];
-
-    // ① 店舗情報一覧エリアのURL
-    let shopInfoUrl = null;
     const shopHeadings = Array.from(mainContent.querySelectorAll('h1, h2, h3, h4, h5, h6, div, p'));
+
+    // ① 店舗情報一覧エリア
+    let shopInfoUrl = null;
     let shopHeader = shopHeadings.find(el => el.children.length === 0 && el.innerText.trim().includes('店舗情報一覧'));
     if (shopHeader) {
       let cur = shopHeader.nextElementSibling;
@@ -101,41 +100,52 @@
       }
     }
 
-    // ② 編集部コメントエリアのURL（リンクタグ ＋ 生URLテキスト両方の重複判定）
-    let editorCommentHeader = shopHeadings.find(el => el.children.length === 0 && el.innerText.trim() === '編集部コメント');
+    // ② 編集部コメントエリア（親範囲・HTML丸ごとスキャンで生URL漏れを完全ガード）
+    let editorCommentHeader = shopHeadings.find(el => el.innerText.trim() === '編集部コメント' || el.innerText.trim().includes('編集部コメント'));
     let editorUrlsSet = new Set();
     let rawUrlFound = false;
 
     if (editorCommentHeader) {
+      // 編集部コメントから次の見出しまでのテキスト/HTML範囲を全確保
+      let commentSectionHtml = "";
+      let commentSectionText = "";
       let cur = editorCommentHeader.nextElementSibling;
-      while (cur) {
-        const tag = cur.tagName.toLowerCase();
-        if (['h1','h2','h3'].includes(tag) || cur.innerText.includes('Googleマップ')) break;
 
-        // 1. <a>タグからの抽出
+      while (cur) {
+        const text = cur.innerText || "";
+        const tag = cur.tagName.toLowerCase();
+        if (['h1','h2','h3'].includes(tag) || text.includes('Googleマップ')) break;
+
+        commentSectionHtml += cur.innerHTML + " ";
+        commentSectionText += text + " ";
+
+        // <a>タグのリンク取得
         cur.querySelectorAll('a[href]').forEach(a => {
           const h = a.getAttribute('href');
-          if (h && !h.startsWith('#') && !h.includes('google.com/maps')) editorUrlsSet.add(h.trim());
+          if (h && !h.startsWith('#') && !h.includes('google.com/maps')) {
+            editorUrlsSet.add(h.trim());
+          }
         });
-
-        // 2. プレーンテキスト（非リンク）の生URL抽出
-        const textContent = cur.innerText || "";
-        const rawMatches = textContent.match(/https?:\/\/[^\s\)\>]+/g);
-        if (rawMatches) {
-          rawMatches.forEach(url => {
-            editorUrlsSet.add(url.trim());
-            rawUrlFound = true;
-          });
-        }
 
         cur = cur.nextElementSibling;
       }
 
+      // <a>タグで囲まれていない「生URL（https://...）」をHTMLから正規表現抽出
+      // <a>タグ内のhref自体を除外したテキストから生のURLを探す
+      const htmlWithoutTags = commentSectionHtml.replace(/<a[\s\S]*?<\/a>/gi, '');
+      const rawMatches = htmlWithoutTags.match(/https?:\/\/[^\s\)\>\]"'＜＞「」]+/g);
+
+      if (rawMatches && rawMatches.length > 0) {
+        rawUrlFound = true;
+        rawMatches.forEach(url => editorUrlsSet.add(url.trim()));
+      }
+
+      // 判定処理
       if (rawUrlFound) {
         l.push("編集部コメント内生URL検出: リンク化されていない生URLテキスト「(https://...)」が露出しています");
       }
-      if (editorUrlsSet.size >= 2) {
-        l.push("編集部コメント内複数/重複URL異常: 複数のURL（またはブログカードと生URLの重複）が " + editorUrlsSet.size + " 件検出されました");
+      if (editorUrlsSet.size >= 2 || (commentSectionText.includes('http') && editorUrlsSet.size >= 1 && rawUrlFound)) {
+        l.push("編集部コメント内複数/重複URL異常: ブログカードと生URLテキストの重複（または複数リンク）が検出されました");
       }
     }
 
