@@ -100,53 +100,41 @@
       }
     }
 
-    // ② 編集部コメントエリア（親範囲・HTML丸ごとスキャンで生URL漏れを完全ガード）
-    let editorCommentHeader = shopHeadings.find(el => el.innerText.trim() === '編集部コメント' || el.innerText.trim().includes('編集部コメント'));
+    // ② 編集部コメントエリア（全体HTML・テキストから直接判定）
     let editorUrlsSet = new Set();
-    let rawUrlFound = false;
 
-    if (editorCommentHeader) {
-      // 編集部コメントから次の見出しまでのテキスト/HTML範囲を全確保
-      let commentSectionHtml = "";
-      let commentSectionText = "";
-      let cur = editorCommentHeader.nextElementSibling;
+    // ページ全体/ブロック要素全体から「編集部コメント」が含まれるエリアを取得
+    const allWraps = Array.from(mainContent.querySelectorAll('div, section, article')).filter(el => el.innerText && el.innerText.includes('編集部コメント') && el.innerText.includes('最新情報は公式サイト'));
 
-      while (cur) {
-        const text = cur.innerText || "";
-        const tag = cur.tagName.toLowerCase();
-        if (['h1','h2','h3'].includes(tag) || text.includes('Googleマップ')) break;
+    let targetBlockText = "";
+    let targetBlockHtml = "";
 
-        commentSectionHtml += cur.innerHTML + " ";
-        commentSectionText += text + " ";
+    if (allWraps.length > 0) {
+      // 一番範囲の狭い親ブロックを選択
+      const targetWrap = allWraps[allWraps.length - 1];
+      targetBlockText = targetWrap.innerText || "";
+      targetBlockHtml = targetWrap.innerHTML || "";
 
-        // <a>タグのリンク取得
-        cur.querySelectorAll('a[href]').forEach(a => {
-          const h = a.getAttribute('href');
-          if (h && !h.startsWith('#') && !h.includes('google.com/maps')) {
-            editorUrlsSet.add(h.trim());
-          }
-        });
+      // <a>タグのURL
+      targetWrap.querySelectorAll('a[href]').forEach(a => {
+        const h = a.getAttribute('href');
+        if (h && !h.startsWith('#') && !h.includes('google.com/maps')) {
+          editorUrlsSet.add(h.trim());
+        }
+      });
+    }
 
-        cur = cur.nextElementSibling;
-      }
+    // <a>タグを除外した生のテキスト部分から https://... を抽出
+    const rawHtmlNoAnchor = targetBlockHtml.replace(/<a[\s\S]*?<\/a>/gi, '');
+    const rawMatches = rawHtmlNoAnchor.match(/https?:\/\/[^\s\)\>\]"'＜＞「」]+/g);
 
-      // <a>タグで囲まれていない「生URL（https://...）」をHTMLから正規表現抽出
-      // <a>タグ内のhref自体を除外したテキストから生のURLを探す
-      const htmlWithoutTags = commentSectionHtml.replace(/<a[\s\S]*?<\/a>/gi, '');
-      const rawMatches = htmlWithoutTags.match(/https?:\/\/[^\s\)\>\]"'＜＞「」]+/g);
+    if (rawMatches && rawMatches.length > 0) {
+      l.push("編集部コメント内生URL検出: リンク化されていない生URLテキスト「(https://...)」が露出しています");
+      rawMatches.forEach(url => editorUrlsSet.add(url.trim()));
+    }
 
-      if (rawMatches && rawMatches.length > 0) {
-        rawUrlFound = true;
-        rawMatches.forEach(url => editorUrlsSet.add(url.trim()));
-      }
-
-      // 判定処理
-      if (rawUrlFound) {
-        l.push("編集部コメント内生URL検出: リンク化されていない生URLテキスト「(https://...)」が露出しています");
-      }
-      if (editorUrlsSet.size >= 2 || (commentSectionText.includes('http') && editorUrlsSet.size >= 1 && rawUrlFound)) {
-        l.push("編集部コメント内複数/重複URL異常: ブログカードと生URLテキストの重複（または複数リンク）が検出されました");
-      }
+    if (editorUrlsSet.size >= 2 || (rawMatches && rawMatches.length > 0 && editorUrlsSet.size >= 1)) {
+      l.push("編集部コメント内複数/重複URL異常: ブログカードと生URLテキストの重複（または複数リンク）が検出されました");
     }
 
     // URLリストの組み立て
