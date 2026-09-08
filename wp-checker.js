@@ -3,7 +3,8 @@
     const r = ["基本情報","店舗概要","所在地・アクセス","営業時間・定休日","サービス","設備","店舗情報一覧","まとめ","FAQ","編集部コメント","Googleマップ"];
     let m = [], l = [];
     
-    const mainContent = document.querySelector('.entry-content, .post-content, .article-body, .entry-body') || document.body;
+    // 安全な要素取得（null対策）
+    const mainContent = document.querySelector('.entry-content, .post-content, .article-body, .entry-body') || document.body || document.documentElement;
     
     // 1. Googleマップ要素の検出
     const gmapIframe = mainContent.querySelector('iframe[src*="google.com/maps"], iframe[src*="maps.google"]');
@@ -15,7 +16,8 @@
     }
 
     // 2. タイトルチェック
-    const txt = document.querySelector('.entry-title, h1.post-title, h1') ? document.querySelector('.entry-title, h1.post-title, h1').innerText.trim() : "";
+    const titleEl = document.querySelector('.entry-title, h1.post-title, h1');
+    const txt = titleEl ? titleEl.innerText.trim() : "";
     if (!txt) m.push("記事タイトル");
 
     // 3. アイキャッチ画像チェック
@@ -29,8 +31,8 @@
       l.push("タイトル異常: 先頭が地名");
     }
 
-    const pageText = document.body.innerText || "";
-    const fullHtml = document.body.innerHTML || "";
+    const pageText = (document.body ? document.body.innerText : "") || "";
+    const fullHtml = (document.body ? document.body.innerHTML : "") || "";
 
     // 5. カテゴリチェック
     const hasCategoryEl = !!document.querySelector('.entry-categories, .cat-links, [class*="category"]');
@@ -64,7 +66,7 @@
     }
 
     // 9. AI不適切回答チェック
-    let cleanMainText = (mainContent.innerText || "").replace(/0\d{1,4}-\d{1,4}-\d{3,4}/g, "");
+    let cleanMainText = ((mainContent.innerText) || "").replace(/0\d{1,4}-\d{1,4}-\d{3,4}/g, "");
     const aiPatterns = ["入力されています", "入力情報では", "入力されていません", "入力情報", "「-」と入力", "は「-」"];
     let foundAiWords = [];
     aiPatterns.forEach(pattern => {
@@ -76,10 +78,8 @@
       l.push("AI異常文言検出: 本文/Q&A内に「" + Array.from(new Set(foundAiWords)).join("」「") + "」が含まれています");
     }
 
-    // 10. URL抽出 (店舗URL×2 + Gマップiframe×1)
+    // 10. URL抽出
     let targetUrls = [];
-
-    // ① 店舗情報一覧エリアのURL
     let shopInfoUrl = null;
     const allEls = Array.from(mainContent.querySelectorAll('*'));
     let shopEl = allEls.find(el => el.children.length === 0 && el.innerText && el.innerText.trim().includes('店舗情報一覧'));
@@ -103,7 +103,6 @@
       }
     }
 
-    // ② 編集部コメントエリアのURL（mshotsデコード対応）
     let editorCommentUrl = null;
     let editorEl = allEls.find(el => el.children.length === 0 && el.innerText && el.innerText.trim().includes('編集部コメント'));
 
@@ -192,6 +191,6 @@
     }
 
   } catch(err) {
-    alert("実行時エラー: " + err.message);
+    alert("WPチェッカー実行エラー:\n" + err.stack);
   }
 })();
