@@ -42,17 +42,19 @@
       issues.push("AI参照コード混入疑い: 「cit_...」「context」等のAIコード・属性が検出されました");
     }
 
-    // 8. AI「入力」不適切回答チェック
-    const mainText = b.innerText || "";
-    const aiPatterns = ["入力されています", "入力情報では", "入力されていません", "入力情報"];
+    // 8. AI「入力」不適切回答チェック（電話番号除外 ＆ 検知パターン拡張版）
+    const rawMainText = b.innerText || "";
+    // 電話番号（0X-XXXX-XXXX 等）を除外して誤検知を防ぐ
+    const cleanMainText = rawMainText.replace(/0\d{1,4}-\d{1,4}-\d{3,4}/g, "");
+    const aiPatterns = ["入力されています", "入力情報では", "入力されていません", "入力情報", "「-」と入力", "は「-」"];
     let foundAiWords = [];
     aiPatterns.forEach(function(pattern){
-      if (mainText.includes(pattern)) {
+      if (cleanMainText.includes(pattern)) {
         foundAiWords.push(pattern);
       }
     });
     if (foundAiWords.length > 0) {
-      issues.push("AI異常文言検出: 本文/Q&A内に「" + foundAiWords.join("」「") + "」が含まれています");
+      issues.push("AI異常文言検出: 本文/Q&A内に「" + Array.from(new Set(foundAiWords)).join("」「") + "」が含まれています");
     }
 
     // 9. 編集部コメントURL判定
@@ -87,7 +89,7 @@
     });
 
     // B: 直書きテキスト経由（https://...）
-    const rawMatches = mainText.match(/https?:\/\/[^\s\<\>"\']+/g) || [];
+    const rawMatches = rawMainText.match(/https?:\/\/[^\s\<\>"\']+/g) || [];
     rawMatches.forEach(function(url){
       let clean = url.replace(/&amp;/g, '&').replace(/[\s\)\>\]]+$/, '');
       try {
