@@ -85,12 +85,12 @@
 
     // ① 店舗情報一覧エリア
     let shopInfoUrl = null;
-    const shopHeadings = Array.from(mainContent.querySelectorAll('h1, h2, h3, h4, h5, h6, div, p'));
-    let shopHeader = shopHeadings.find(el => el.children.length === 0 && el.innerText.trim().includes('店舗情報一覧'));
+    const allElements = Array.from(mainContent.querySelectorAll('*'));
+    let shopHeader = allElements.find(el => ['H1','H2','H3','H4','H5','H6'].includes(el.tagName) && el.innerText.trim().includes('店舗情報一覧'));
     if (shopHeader) {
       let cur = shopHeader.nextElementSibling;
       while (cur) {
-        if (['h1','h2','h3'].includes(cur.tagName.toLowerCase()) || cur.innerText.includes('まとめ')) break;
+        if (['H1','H2','H3'].includes(cur.tagName) || cur.innerText.includes('まとめ')) break;
         const link = cur.querySelector('a[href]');
         if (link) {
           const h = link.getAttribute('href');
@@ -100,40 +100,49 @@
       }
     }
 
-    // ② 編集部コメント/最新情報エリア
+    // ② 編集部コメントエリア（見出しタグから確実に領域を取得）
     let editorUrlsSet = new Set();
-    const commentBlocks = Array.from(mainContent.querySelectorAll('div, section, p')).filter(el => {
-      const t = el.innerText || "";
-      return t.includes("最新情報は公式サイト") || t.includes("本記事は公開情報をもとに");
-    });
+    let editorHeader = allElements.find(el => ['H1','H2','H3','H4','H5','H6','DIV','P'].includes(el.tagName) && el.innerText.trim() === '編集部コメント');
 
-    if (commentBlocks.length > 0) {
-      const targetBlock = commentBlocks[commentBlocks.length - 1];
-      const blockHtml = targetBlock.innerHTML || "";
+    if (editorHeader) {
+      let cur = editorHeader.nextElementSibling;
+      let combinedHtml = "";
+      let combinedText = "";
 
-      // <a>タグのリンク取得
-      targetBlock.querySelectorAll('a[href]').forEach(a => {
-        const h = a.getAttribute('href');
-        if (h && !h.startsWith('#') && !h.includes('google.com/maps')) {
-          editorUrlsSet.add(h.trim());
-        }
-      });
+      while (cur) {
+        const text = cur.innerText || "";
+        const tag = cur.tagName;
+        if (['H1','H2','H3'].includes(tag) || text.includes('Googleマップ')) break;
 
-      // <a>タグを除外した「生のURL文字列」の有無を直接チェック
-      const pureTextNoLinks = blockHtml.replace(/<a[\s\S]*?<\/a>/gi, '');
-      const hasRawUrlText = /https?:\/\/[^\s\)\>\]"'＜＞「」\n\r]+/.test(pureTextNoLinks);
+        combinedHtml += cur.innerHTML + " ";
+        combinedText += text + " ";
 
-      if (hasRawUrlText) {
-        l.push("編集部コメント内生URL露出: リンク化されていない 「(https://...)」 のテキストが露出しています");
+        // <a>タグのURLを収集
+        cur.querySelectorAll('a[href]').forEach(a => {
+          const h = a.getAttribute('href');
+          if (h && !h.startsWith('#') && !h.includes('google.com/maps')) {
+            editorUrlsSet.add(h.trim());
+          }
+        });
+
+        cur = cur.nextElementSibling;
       }
-      if (editorUrlsSet.size >= 2 || (hasRawUrlText && editorUrlsSet.size >= 1)) {
+
+      // <a>タグ除去後の生のテキストからURL文字列（https://...）があるかチェック
+      const pureTextNoLinks = combinedHtml.replace(/<a[\s\S]*?<\/a>/gi, '');
+      const rawMatches = pureTextNoLinks.match(/https?:\/\/[^\s\)\>\]"'＜＞「」\n\r]+/g);
+
+      if (rawMatches && rawMatches.length > 0) {
+        l.push("編集部コメント内生URL露出: リンク化されていない 「(https://...)」 テキストが露出しています");
+        rawMatches.forEach(url => editorUrlsSet.add(url.trim()));
+      }
+
+      if (editorUrlsSet.size >= 2 || (rawMatches && rawMatches.length > 0 && editorUrlsSet.size >= 1)) {
         l.push("編集部コメント内重複異常: ブログカードと生URLテキストの両方が挿入されています");
       }
-    }
-
-    // 保険：画面全体のテキストから (https://...) のテキスト直書きを検知
-    if (/\(https?:\/\/[^\)]+\)/.test(pageText)) {
-      if (!l.some(item => item.includes("生URL"))) {
+    } else {
+      // 見出しが見つからない場合のフォールバック（画面全体から「(https://...)」のテキスト直書きを判定）
+      if (/\(https?:\/\/[^\)]+\)/.test(pageText)) {
         l.push("本文内生URL検出: リンク化されていないカッコ書きURL 「(https://...)」 が見つかりました");
       }
     }
@@ -144,7 +153,7 @@
     if (firstEditorUrl) targetUrls.push({ name: "編集部コメント", url: firstEditorUrl });
     if (mapUrl) targetUrls.push({ name: "Googleマップ", url: mapUrl });
 
-    // 結果出力メッセージ（長いURLは見やすさのため簡略化表示）
+    // 結果出力メッセージ（長いURLは簡略化表示）
     let msg = "【WordPress WP判定結果】\n\n";
     if (m.length === 0 && l.length === 0) {
       msg += "✅ 問題なし（全項目・アイキャッチ・AIコード・重複リンク等 正常）\n";
