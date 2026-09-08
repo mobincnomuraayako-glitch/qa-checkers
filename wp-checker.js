@@ -100,7 +100,7 @@
       }
     }
 
-    // ② 編集部コメント/最新情報エリア（見出し名に頼らずキーワードでブロックを特定）
+    // ② 編集部コメント/最新情報エリア
     let editorUrlsSet = new Set();
     const commentBlocks = Array.from(mainContent.querySelectorAll('div, section, p')).filter(el => {
       const t = el.innerText || "";
@@ -108,12 +108,10 @@
     });
 
     if (commentBlocks.length > 0) {
-      // 該当する一番細かいブロック要素を対象にする
       const targetBlock = commentBlocks[commentBlocks.length - 1];
       const blockHtml = targetBlock.innerHTML || "";
-      const blockText = targetBlock.innerText || "";
 
-      // <a>タグ内のURL
+      // <a>タグのリンク取得
       targetBlock.querySelectorAll('a[href]').forEach(a => {
         const h = a.getAttribute('href');
         if (h && !h.startsWith('#') && !h.includes('google.com/maps')) {
@@ -121,23 +119,23 @@
         }
       });
 
-      // <a>タグを剥がしたテキスト部分から、裸のURL (https://...) を探す
+      // <a>タグを除外した「生のURL文字列」の有無を直接チェック
       const pureTextNoLinks = blockHtml.replace(/<a[\s\S]*?<\/a>/gi, '');
-      const rawMatches = pureTextNoLinks.match(/https?:\/\/[^\s\)\>\]"'＜＞「」\n\r]+/g);
+      const hasRawUrlText = /https?:\/\/[^\s\)\>\]"'＜＞「」\n\r]+/.test(pureTextNoLinks);
 
-      if (rawMatches && rawMatches.length > 0) {
-        l.push("編集部コメント内生URL検出: リンク化されていない生URLテキスト「(https://...)」が露出しています");
-        rawMatches.forEach(url => editorUrlsSet.add(url.trim()));
+      if (hasRawUrlText) {
+        l.push("編集部コメント内生URL露出: リンク化されていない 「(https://...)」 のテキストが露出しています");
       }
-
-      if (editorUrlsSet.size >= 2 || (rawMatches && rawMatches.length > 0 && editorUrlsSet.size >= 1)) {
-        l.push("編集部コメント内複数/重複URL異常: ブログカードと生URLテキストの重複（または複数リンク）が検出されました");
+      if (editorUrlsSet.size >= 2 || (hasRawUrlText && editorUrlsSet.size >= 1)) {
+        l.push("編集部コメント内重複異常: ブログカードと生URLテキストの両方が挿入されています");
       }
     }
 
-    // 全体レベルでの「カッコ付きURLテキスト (https://...)」の保険チェック
-    if (/\(https?:\/\/[^\)]+\)/.test(fullHtml) && !l.some(item => item.includes("生URL"))) {
-      l.push("本文内生URL検出: リンク化されていない 「(https://...)」 のテキスト記述が存在します");
+    // 保険：画面全体のテキストから (https://...) のテキスト直書きを検知
+    if (/\(https?:\/\/[^\)]+\)/.test(pageText)) {
+      if (!l.some(item => item.includes("生URL"))) {
+        l.push("本文内生URL検出: リンク化されていないカッコ書きURL 「(https://...)」 が見つかりました");
+      }
     }
 
     // URLリストの組み立て
@@ -146,7 +144,7 @@
     if (firstEditorUrl) targetUrls.push({ name: "編集部コメント", url: firstEditorUrl });
     if (mapUrl) targetUrls.push({ name: "Googleマップ", url: mapUrl });
 
-    // 結果出力メッセージ
+    // 結果出力メッセージ（長いURLは見やすさのため簡略化表示）
     let msg = "【WordPress WP判定結果】\n\n";
     if (m.length === 0 && l.length === 0) {
       msg += "✅ 問題なし（全項目・アイキャッチ・AIコード・重複リンク等 正常）\n";
@@ -158,7 +156,10 @@
 
     msg += "\n----------------------------------------\n";
     if (targetUrls.length > 0) {
-      msg += "【確認対象URL（" + targetUrls.length + "件）】\n" + targetUrls.map(item => "・[" + item.name + "] " + item.url).join("\n");
+      msg += "【確認対象URL（" + targetUrls.length + "件）】\n" + targetUrls.map(item => {
+        const shortUrl = item.url.length > 40 ? item.url.substring(0, 40) + "..." : item.url;
+        return "・[" + item.name + "] " + shortUrl;
+      }).join("\n");
     } else {
       msg += "【確認対象URL】\n・なし";
     }
