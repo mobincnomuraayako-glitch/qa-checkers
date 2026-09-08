@@ -12,7 +12,6 @@
     // ピン（マーカー）の有無チェック関数
     function hasMapPin(url) {
       if (!url) return false;
-      // q=, query=, cid=, 座標指定(!3d, !4d) 等が含まれていればピンありと判定
       return /[?&](q|query|cid)=/.test(url) || /!3d[-0-9.]*!4d[-0-9.]*/.test(url) || url.includes('maps.app.goo.gl');
     }
 
@@ -69,17 +68,17 @@
       l.push("AIコンテキストコード混入: 「cit_...」等の出典コード・属性が検出されました");
     }
 
-    // 9. AI不適切回答チェック
-    const mainText = mainContent.innerText || "";
-    const aiPatterns = ["入力されています", "入力情報では", "入力されていません", "入力情報"];
+    // 9. AI不適切回答チェック（電話番号のハイフンを除外して判定）
+    let cleanMainText = (mainContent.innerText || "").replace(/0\d{1,4}-\d{1,4}-\d{3,4}/g, "");
+    const aiPatterns = ["入力されています", "入力情報では", "入力されていません", "入力情報", "「-」と入力", "は「-」"];
     let foundAiWords = [];
     aiPatterns.forEach(pattern => {
-      if (mainText.includes(pattern)) {
+      if (cleanMainText.includes(pattern)) {
         foundAiWords.push(pattern);
       }
     });
     if (foundAiWords.length > 0) {
-      l.push("AI異常文言検出: 本文/Q&A内に「" + foundAiWords.join("」「") + "」が含まれています");
+      l.push("AI異常文言検出: 本文/Q&A内に「" + Array.from(new Set(foundAiWords)).join("」「") + "」が含まれています");
     }
 
     // 10. 各エリアからのURLピンポイント抽出（店舗情報・編集部コメント・マップ）
