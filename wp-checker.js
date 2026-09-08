@@ -101,22 +101,41 @@
       }
     }
 
-    // ② 編集部コメントエリアのURL
+    // ② 編集部コメントエリアのURL（リンクタグ ＋ 生URLテキスト両方の重複判定）
     let editorCommentHeader = shopHeadings.find(el => el.children.length === 0 && el.innerText.trim() === '編集部コメント');
     let editorUrlsSet = new Set();
+    let rawUrlFound = false;
+
     if (editorCommentHeader) {
       let cur = editorCommentHeader.nextElementSibling;
       while (cur) {
         const tag = cur.tagName.toLowerCase();
         if (['h1','h2','h3'].includes(tag) || cur.innerText.includes('Googleマップ')) break;
+
+        // 1. <a>タグからの抽出
         cur.querySelectorAll('a[href]').forEach(a => {
           const h = a.getAttribute('href');
-          if (h && !h.startsWith('#') && !h.includes('google.com/maps')) editorUrlsSet.add(h);
+          if (h && !h.startsWith('#') && !h.includes('google.com/maps')) editorUrlsSet.add(h.trim());
         });
+
+        // 2. プレーンテキスト（非リンク）の生URL抽出
+        const textContent = cur.innerText || "";
+        const rawMatches = textContent.match(/https?:\/\/[^\s\)\>]+/g);
+        if (rawMatches) {
+          rawMatches.forEach(url => {
+            editorUrlsSet.add(url.trim());
+            rawUrlFound = true;
+          });
+        }
+
         cur = cur.nextElementSibling;
       }
+
+      if (rawUrlFound) {
+        l.push("編集部コメント内生URL検出: リンク化されていない生URLテキスト「(https://...)」が露出しています");
+      }
       if (editorUrlsSet.size >= 2) {
-        l.push("編集部コメント内複数URL異常: 異なるリンク先が " + editorUrlsSet.size + " 件設定されています");
+        l.push("編集部コメント内複数/重複URL異常: 複数のURL（またはブログカードと生URLの重複）が " + editorUrlsSet.size + " 件検出されました");
       }
     }
 
