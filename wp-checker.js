@@ -67,7 +67,7 @@
       l.push("AIコンテキストコード混入: 出典コード・属性が検出されました");
     }
 
-    // 9. AI不適切回答チェック（電話番号ハイフン除外）
+    // 9. AI不適切回答チェック
     let cleanMainText = (mainContent.innerText || "").replace(/0\d{1,4}-\d{1,4}-\d{3,4}/g, "");
     const aiPatterns = ["入力されています", "入力情報では", "入力されていません", "入力情報", "「-」と入力", "は「-」"];
     let foundAiWords = [];
@@ -80,12 +80,12 @@
       l.push("AI異常文言検出: 本文/Q&A内に「" + Array.from(new Set(foundAiWords)).join("」「") + "」が含まれています");
     }
 
-    // 10. 各エリアからのURLピンポイント抽出 ＆ 生URL・ダブり判定
+    // 10. 各エリアからのURL抽出 ＆ 生URL・ダブり判定
     let targetUrls = [];
-    const shopHeadings = Array.from(mainContent.querySelectorAll('h1, h2, h3, h4, h5, h6, div, p'));
 
     // ① 店舗情報一覧エリア
     let shopInfoUrl = null;
+    const shopHeadings = Array.from(mainContent.querySelectorAll('h1, h2, h3, h4, h5, h6, div, p'));
     let shopHeader = shopHeadings.find(el => el.children.length === 0 && el.innerText.trim().includes('店舗情報一覧'));
     if (shopHeader) {
       let cur = shopHeader.nextElementSibling;
@@ -100,41 +100,44 @@
       }
     }
 
-    // ② 編集部コメントエリア（全体HTML・テキストから直接判定）
+    // ② 編集部コメント/最新情報エリア（見出し名に頼らずキーワードでブロックを特定）
     let editorUrlsSet = new Set();
+    const commentBlocks = Array.from(mainContent.querySelectorAll('div, section, p')).filter(el => {
+      const t = el.innerText || "";
+      return t.includes("最新情報は公式サイト") || t.includes("本記事は公開情報をもとに");
+    });
 
-    // ページ全体/ブロック要素全体から「編集部コメント」が含まれるエリアを取得
-    const allWraps = Array.from(mainContent.querySelectorAll('div, section, article')).filter(el => el.innerText && el.innerText.includes('編集部コメント') && el.innerText.includes('最新情報は公式サイト'));
+    if (commentBlocks.length > 0) {
+      // 該当する一番細かいブロック要素を対象にする
+      const targetBlock = commentBlocks[commentBlocks.length - 1];
+      const blockHtml = targetBlock.innerHTML || "";
+      const blockText = targetBlock.innerText || "";
 
-    let targetBlockText = "";
-    let targetBlockHtml = "";
-
-    if (allWraps.length > 0) {
-      // 一番範囲の狭い親ブロックを選択
-      const targetWrap = allWraps[allWraps.length - 1];
-      targetBlockText = targetWrap.innerText || "";
-      targetBlockHtml = targetWrap.innerHTML || "";
-
-      // <a>タグのURL
-      targetWrap.querySelectorAll('a[href]').forEach(a => {
+      // <a>タグ内のURL
+      targetBlock.querySelectorAll('a[href]').forEach(a => {
         const h = a.getAttribute('href');
         if (h && !h.startsWith('#') && !h.includes('google.com/maps')) {
           editorUrlsSet.add(h.trim());
         }
       });
+
+      // <a>タグを剥がしたテキスト部分から、裸のURL (https://...) を探す
+      const pureTextNoLinks = blockHtml.replace(/<a[\s\S]*?<\/a>/gi, '');
+      const rawMatches = pureTextNoLinks.match(/https?:\/\/[^\s\)\>\]"'＜＞「」\n\r]+/g);
+
+      if (rawMatches && rawMatches.length > 0) {
+        l.push("編集部コメント内生URL検出: リンク化されていない生URLテキスト「(https://...)」が露出しています");
+        rawMatches.forEach(url => editorUrlsSet.add(url.trim()));
+      }
+
+      if (editorUrlsSet.size >= 2 || (rawMatches && rawMatches.length > 0 && editorUrlsSet.size >= 1)) {
+        l.push("編集部コメント内複数/重複URL異常: ブログカードと生URLテキストの重複（または複数リンク）が検出されました");
+      }
     }
 
-    // <a>タグを除外した生のテキスト部分から https://... を抽出
-    const rawHtmlNoAnchor = targetBlockHtml.replace(/<a[\s\S]*?<\/a>/gi, '');
-    const rawMatches = rawHtmlNoAnchor.match(/https?:\/\/[^\s\)\>\]"'＜＞「」]+/g);
-
-    if (rawMatches && rawMatches.length > 0) {
-      l.push("編集部コメント内生URL検出: リンク化されていない生URLテキスト「(https://...)」が露出しています");
-      rawMatches.forEach(url => editorUrlsSet.add(url.trim()));
-    }
-
-    if (editorUrlsSet.size >= 2 || (rawMatches && rawMatches.length > 0 && editorUrlsSet.size >= 1)) {
-      l.push("編集部コメント内複数/重複URL異常: ブログカードと生URLテキストの重複（または複数リンク）が検出されました");
+    // 全体レベルでの「カッコ付きURLテキスト (https://...)」の保険チェック
+    if (/\(https?:\/\/[^\)]+\)/.test(fullHtml) && !l.some(item => item.includes("生URL"))) {
+      l.push("本文内生URL検出: リンク化されていない 「(https://...)」 のテキスト記述が存在します");
     }
 
     // URLリストの組み立て
