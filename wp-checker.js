@@ -105,48 +105,59 @@
       }
     }
 
-    // ② 編集部コメントエリアのURL（2個目：blogcardコンテナ直接解析対応）
+    // ② 編集部コメントエリアのURL（2個目：mshots型カード＋HTML解析対応）
     let editorCommentUrl = null;
     let editorEl = allEls.find(el => el.children.length === 0 && el.innerText && el.innerText.trim().includes('編集部コメント'));
 
     if (editorEl) {
-      // 編集部コメント見出しから次の「Googleマップ」見出しまでの要素をすべて巡回
-      let currentNode = editorEl.closest('h1,h2,h3,h4,p,div') || editorEl;
-      
-      while (currentNode) {
-        // 「Googleマップ」見出しに到達したら検索終了
-        if (currentNode !== editorEl && currentNode.innerText && currentNode.innerText.includes('Googleマップ')) {
-          break;
+      // 編集部コメントより下にある「blogcard」コンテナを取得
+      const blogcards = Array.from(mainContent.querySelectorAll('.blogcard, .external-blogcard, [class*="blogcard"]'));
+      let targetCard = blogcards.find(card => editorEl.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING);
+
+      if (targetCard) {
+        // パターンA: 通常の <a> タグから抽出
+        const aTag = targetCard.querySelector('a[href]');
+        if (aTag && !aTag.getAttribute('href').includes('google.com/maps')) {
+          editorCommentUrl = aTag.getAttribute('href').trim();
         }
 
-        // 方法A: 画面キャプチャにある div.blogcard や <a> タグ内の href を探す
-        const links = Array.from(currentNode.querySelectorAll ? currentNode.querySelectorAll('a[href], .blogcard a, .external-blogcard a, [class*="blogcard"] a') : []);
-        if (currentNode.tagName === 'A' && currentNode.getAttribute('href')) links.unshift(currentNode);
-
-        for (let a of links) {
-          const h = a.getAttribute('href');
-          if (h && !h.startsWith('#') && !h.includes('google.com/maps')) {
-            editorCommentUrl = h.trim();
-            break;
+        // パターンB: mshots（サムネイルAPI画像）のsrcから埋め込みURLをデコードして抽出
+        if (!editorCommentUrl) {
+          const img = targetCard.querySelector('img[src*="mshots"]');
+          if (img) {
+            const src = img.getAttribute('src');
+            const match = src.match(/mshots\/v1\/([^?\s]+)/);
+            if (match && match[1]) {
+              editorCommentUrl = decodeURIComponent(match[1]).trim();
+            }
           }
         }
-        if (editorCommentUrl) break;
 
-        // 方法B: カードのデータ属性（data-url等）やテキスト直書きURLを拾う
-        if (currentNode.getAttribute && currentNode.getAttribute('data-url')) {
-          editorCommentUrl = currentNode.getAttribute('data-url').trim();
-          break;
+        // パターンC: カード内のHTML全文字列からURLっぽいものを強制抽出
+        if (!editorCommentUrl) {
+          const cardHtml = targetCard.innerHTML;
+          const urlMatch = cardHtml.match(/https?%3A%2F%2F[^\s"'<>\n\r]+/i) || cardHtml.match(/https?:\/\/[^\s"'<>\n\r]+/i);
+          if (urlMatch) {
+            let extracted = decodeURIComponent(urlMatch[0]);
+            if (!extracted.includes('s.wordpress.com') && !extracted.includes('google.com/maps')) {
+              editorCommentUrl = extracted.trim();
+            }
+          }
         }
+      }
 
-        const rawText = currentNode.innerText || "";
-        const rawMatch = rawText.match(/https?:\/\/[^\s\)\>\]"'＜＞「」\n\r]+/);
-        if (rawMatch && !rawMatch[0].includes('google.com/maps')) {
-          editorCommentUrl = rawMatch[0].trim();
-          break;
+      // パターンD: フォールバック（カードが見つからない場合の通常の探索）
+      if (!editorCommentUrl) {
+        const allAnchors = Array.from(mainContent.querySelectorAll('a[href]'));
+        for (let a of allAnchors) {
+          if (editorEl.compareDocumentPosition(a) & Node.DOCUMENT_POSITION_FOLLOWING) {
+            const h = a.getAttribute('href');
+            if (h && !h.startsWith('#') && !h.includes('google.com/maps')) {
+              editorCommentUrl = h.trim();
+              break;
+            }
+          }
         }
-
-        // 次の要素へ移動
-        currentNode = currentNode.nextElementSibling;
       }
     }
 
