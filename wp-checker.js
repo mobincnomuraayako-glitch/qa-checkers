@@ -76,9 +76,7 @@
       l.push("AI異常文言検出: 本文/Q&A内に「" + Array.from(new Set(foundAiWords)).join("」「") + "」が含まれています");
     }
 
-    // ----------------------------------------------------
     // 10. URL抽出 (店舗URL×2 + Gマップiframe×1)
-    // ----------------------------------------------------
     let targetUrls = [];
 
     // ① 店舗情報一覧エリアのURL
@@ -105,7 +103,7 @@
       }
     }
 
-    // ② 編集部コメントエリアのURL（mshotsデコード解読対応）
+    // ② 編集部コメントエリアのURL（mshotsデコード対応）
     let editorCommentUrl = null;
     let editorEl = allEls.find(el => el.children.length === 0 && el.innerText && el.innerText.trim().includes('編集部コメント'));
 
@@ -156,7 +154,6 @@
       }
     }
 
-    // 【URL不足判定】
     if (!shopInfoUrl) l.push("URL不足: 店舗情報一覧の店舗URL（1件目）が見つかりません");
     if (!editorCommentUrl) l.push("URL不足: 編集部コメント内の店舗URL（2件目）が見つかりません");
     if (!mapUrl) l.push("URL不足: Googleマップ（iframe）が見つかりません");
@@ -165,7 +162,6 @@
     if (editorCommentUrl) targetUrls.push({ name: "編集部コメント", url: editorCommentUrl });
     if (mapUrl) targetUrls.push({ name: "Googleマップ", url: mapUrl });
 
-    // 結果画面出力
     let msg = "【WordPress WP判定結果】\n\n";
     if (m.length === 0 && l.length === 0 && targetUrls.length === 3) {
       msg += "✅ 問題なし（店舗URL 2件 ＋ Gマップ 1件 正常検出）\n";
