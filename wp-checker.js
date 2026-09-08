@@ -77,7 +77,7 @@
     }
 
     // ----------------------------------------------------
-    // 10. 必須件数チェック (店舗URL×2 + Gマップiframe×1)
+    // 10. URL抽出 (店舗URL×2 + Gマップiframe×1)
     // ----------------------------------------------------
     let targetUrls = [];
 
@@ -98,26 +98,30 @@
       }
     }
 
-    // ② 編集部コメントエリアのURL（2個目：カード/リンク/テキスト不問）
+    // ② 編集部コメントエリアのURL（2個目：エリア全体を徹底スキャン）
     let editorCommentUrl = null;
     let editorHeader = h2List.find(el => el.innerText.trim().includes('編集部コメント'));
 
     if (editorHeader) {
       let cur = editorHeader.nextElementSibling;
       while (cur) {
-        if (['H2','H3'].includes(cur.tagName) || cur.innerText.includes('Googleマップ')) break;
+        // 次の大きな見出し（H2/H3）が来たら探すのを終了
+        if (['H2','H3'].includes(cur.tagName)) break;
 
-        // 形式1: <a>タグ（カード含む）から取得
-        const link = cur.querySelector('a[href]');
-        if (link) {
-          const h = link.getAttribute('href');
+        // エリア内のすべての <a> タグからリンクを探索
+        const links = Array.from(cur.querySelectorAll('a[href]'));
+        if (cur.tagName === 'A' && cur.getAttribute('href')) links.unshift(cur);
+
+        for (let a of links) {
+          const h = a.getAttribute('href');
           if (h && !h.startsWith('#') && !h.includes('google.com/maps')) {
             editorCommentUrl = h.trim();
             break;
           }
         }
+        if (editorCommentUrl) break;
 
-        // 形式2: 生テキスト（丸出しURL）から取得
+        // 生テキストの判定
         const rawMatch = (cur.innerText || "").match(/https?:\/\/[^\s\)\>\]"'＜＞「」\n\r]+/);
         if (rawMatch) {
           editorCommentUrl = rawMatch[0].trim();
@@ -128,19 +132,19 @@
       }
     }
 
-    // 【必須件数の判定】
-    if (!shopInfoUrl) l.push("URL不足: 店舗情報一覧の店舗URL（1件目）が取得できませんでした");
-    if (!editorCommentUrl) l.push("URL不足: 編集部コメントの店舗URL（2件目）が取得できませんでした");
-    if (!mapUrl) l.push("URL不足: Googleマップ（iframe）が取得できませんでした");
+    // 【URL不足判定】（3件揃っていなければ必ず「要修正」にする）
+    if (!shopInfoUrl) l.push("URL不足: 店舗情報一覧の店舗URL（1件目）が見つかりません");
+    if (!editorCommentUrl) l.push("URL不足: 編集部コメント内の店舗URL（2件目）が見つかりません");
+    if (!mapUrl) l.push("URL不足: Googleマップ（iframe）が見つかりません");
 
-    // URLリストの組み立て（合計3件あればコンプリート）
+    // URLリストの組み立て
     if (shopInfoUrl) targetUrls.push({ name: "店舗情報一覧", url: shopInfoUrl });
     if (editorCommentUrl) targetUrls.push({ name: "編集部コメント", url: editorCommentUrl });
     if (mapUrl) targetUrls.push({ name: "Googleマップ", url: mapUrl });
 
-    // 結果出力メッセージ
+    // 判定結果の出力
     let msg = "【WordPress WP判定結果】\n\n";
-    if (m.length === 0 && l.length === 0) {
+    if (m.length === 0 && l.length === 0 && targetUrls.length === 3) {
       msg += "✅ 問題なし（店舗URL 2件 ＋ Gマップ 1件 正常検出）\n";
     } else {
       msg += "❌ 要修正\n";
