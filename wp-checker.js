@@ -1,13 +1,43 @@
-javascript:(function(){try{var r=["基本情報","店舗概要","所在地・アクセス","営業時間・定休日","サービス","設備","店舗情報一覧","まとめ","FAQ","編集部コメント","Googleマップ"];var m=[],l=[];var mainContent=document.querySelector('.entry-content, .post-content, .article-body, .entry-body')||document.body;var gmapIframe=mainContent.querySelector('iframe[src*="google.com/maps"], iframe[src*="maps.google"]');var mapUrl=gmapIframe?(gmapIframe.getAttribute('src')||""):"";function hasMapPin(url){if(!url)return false;return url.indexOf('q=')!==-1||url.indexOf('query=')!==-1||url.indexOf('cid=')!==-1||url.indexOf('!3d')!==-1||url.includes('maps.app.goo.gl')||url.includes('goo.gl/maps');}var titleEl=document.querySelector('.entry-title, h1.post-title, h1');var txt=titleEl?titleEl.innerText.trim():"";if(!txt)m.push("記事タイトル");var eyecatch=document.querySelector('.post-thumbnail img, .eyecatch img, header img, .wp-post-image, .attachment-post-thumbnail');if(!eyecatch)m.push("アイキャッチ画像（未設定または取得不可）");var pref="北海道,青森県,岩手県,宮城県,秋田県,山形県,福島県,茨城県,栃木県,群馬県,埼玉県,千葉県,東京都,神奈川県,新潟県,富山県,石川県,福井県,山梨県,長野県,岐阜県,静岡県,愛知県,三重県,滋賀県,京都府,大阪府,兵庫県,奈良県,和歌山県,鳥取県,島根県,岡山県,広島県,山口県,徳島県,香川県,愛媛県,高知県,福岡県,佐賀県,長崎県,熊本県,大分県,宮崎県,鹿児島県,沖縄県".split(",");if(txt){for(var i=0;i<pref.length;i++){if(txt.indexOf(pref[i])===0){l.push("タイトル異常: 先頭が地名");break;}}}var pageText=document.body?document.body.innerText:"";var fullHtml=document.body?document.body.innerHTML:"";var hasCategoryEl=!!document.querySelector('.entry-categories, .cat-links, [class*="category"]');var hasCategoryText=pageText.includes("カテゴリ")||hasCategoryEl;if(!hasCategoryText||pageText.includes("カテゴリ：未分類")||pageText.includes("カテゴリ : 未分類"))m.push("カテゴリ（設定なしまたは未分類）");r.forEach(function(i){if(i==="Googleマップ"){if(!pageText.includes("Googleマップ")&&!mapUrl)m.push("Googleマップ（埋め込み・記述なし）");else if(mapUrl&&!hasMapPin(mapUrl))m.push("Googleマップ（要素はあるがピン・地点が指定されていません）");}else{if(!pageText.includes(i))m.push(i);}});var captions=Array.from(mainContent.querySelectorAll('figcaption, .wp-caption-text, .wp-element-caption, .blocks-gallery-item__caption')).filter(function(c){return c.innerText.trim()!=="";});if(captions.length>0)l.push("画像キャプション検出: 本文内の画像にキャプションが "+captions.length+" 件入力されています");if(/cit_[a-zA-Z0-9_-]{5,}/.test(fullHtml)||/data-cit/.test(fullHtml)||/googleapis\.com\/v[0-9]/.test(fullHtml)||/citation/.test(fullHtml))l.push("AIコンテキストコード混入: 出典コード・属性が検出されました");var cleanMainText=(mainContent.innerText||"").replace(/0\d{1,4}-\d{1,4}-\d{3,4}/g,"");var aiPatterns=["入力されています","入力情報では","入力されていません","入力情報","「-」と入力","は「-」"];var foundAiWords=[];aiPatterns.forEach(function(pattern){if(cleanMainText.includes(pattern))foundAiWords.push(pattern);});if(foundAiWords.length>0)l.push("AI異常文言検出: 本文/Q&A内に「"+Array.from(new Set(foundAiWords)).join("」「")+"」が含まれています");var postDateStr="取得できず（未公開または未設定）";var metaDate=document.querySelector('meta[property="article:published_time"], meta[property="og:article:published_time"], meta[name="date"]');if(metaDate&&metaDate.getAttribute('content')){postDateStr=metaDate.getAttribute('content');}else{var timeEl=document.querySelector('time.published, time.entry-date, time[datetime], .date, .post-date');if(timeEl){postDateStr=timeEl.getAttribute('datetime')||timeEl.innerText.trim();}else{var matchDate=pageText.match(/(?:公開|予約|日時)[:：]?\s*([0-9０-９]{4}[\/\-年][0-9０-９]{1,2}[\/\-月][0-9０-９]{1,2})/);if(matchDate)postDateStr=matchDate[1];}}var targetUrls=[];var shopInfoUrl=null;var allEls=Array.from(mainContent.querySelectorAll('*'));
+var shopInfoUrl = null;
+var editorCommentUrl = null;
+var allEls = Array.from(mainContent.querySelectorAll('*'));
 
-// 無効なURL（管理画面やアンカー、自サイトの一部など）を判定する関数
+// 無効なURL（管理画面、自サイトの内部リンク、アンカー、マップなど）を徹底的に弾く関数
 function isValidStoreUrl(u) {
     if(!u) return false;
     var trimmed = u.trim();
     if(trimmed === '#' || trimmed.startsWith('#')) return false;
     if(trimmed.includes('/wp-admin/') || trimmed.includes('/wp-login.php')) return false;
     if(trimmed.includes('s.wordpress.com') || trimmed.includes('google.com/maps')) return false;
+    
+    // 自サイトのURL（btj-romance-lab.com）内の管理ページや内部階層っぽかったら除外する
+    if(trimmed.includes('btj-romance-lab.com')) {
+        // 例: local-guide/wp-admin や about.php などを弾く
+        if(trimmed.includes('/wp-admin') || trimmed.includes('about.php') || trimmed.includes('/local-guide/')) {
+            return false;
+        }
+    }
     return true;
 }
 
-var shopEl=allEls.find(function(el){return el.children.length===0&&el.innerText&&el.innerText.trim().includes('店舗情報一覧');});if(shopEl){var cur=shopEl.closest('h1,h2,h3,h4,div,section')||shopEl;while(cur&&cur!==mainContent){var p=cur.nextElementSibling||cur.parentElement;if(p){var aList=Array.from(p.querySelectorAll('a[href]'));if(p.tagName==='A')aList.unshift(p);for(var a of aList){var h=a.getAttribute('href');if(isValidStoreUrl(h)){shopInfoUrl=h.trim();break;}}}if(shopInfoUrl)break;cur=cur.nextElementSibling;}}var editorCommentUrl=null;var editorEl=allEls.find(function(el){return el.children.length===0&&el.innerText&&el.innerText.trim().includes('編集部コメント');});if(editorEl){var blogcards=Array.from(mainContent.querySelectorAll('.blogcard, .external-blogcard, [class*="blogcard"]'));var targetCard=blogcards.find(function(card){return editorEl.compareDocumentPosition(card)&Node.DOCUMENT_POSITION_FOLLOWING;});if(targetCard){var aTag=targetCard.querySelector('a[href]');if(aTag&&isValidStoreUrl(aTag.getAttribute('href'))){editorCommentUrl=aTag.getAttribute('href').trim();}if(!editorCommentUrl){var img=targetCard.querySelector('img[src*="mshots"]');if(img){var src=img.getAttribute('src');var match=src.match(/mshots\/v1\/([^?\s]+)/);if(match&&match[1]){var decoded=decodeURIComponent(match[1]).trim();if(isValidStoreUrl(decoded))editorCommentUrl=decoded;}}}}if(!editorCommentUrl){var cardHtml=targetCard?targetCard.innerHTML:"";var urlMatch=cardHtml.match(/https?%3A%2F%2F[^\s"'<>\n\r]+/i)||cardHtml.match(/https?:\/\/[^\s"'<>\n\r]+/i);if(urlMatch){var extracted=decodeURIComponent(urlMatch[0]);if(isValidStoreUrl(extracted)){editorCommentUrl=extracted.trim();}}}}if(!editorCommentUrl){var allAnchors=Array.from(mainContent.querySelectorAll('a[href]'));for(var a of allAnchors){if(editorEl.compareDocumentPosition(a)&Node.DOCUMENT_POSITION_FOLLOWING){var h2=a.getAttribute('href');if(isValidStoreUrl(h2)){editorCommentUrl=h2.trim();break;}}}}}if(!shopInfoUrl)l.push("URL不足: 店舗情報一覧の店舗URL（1件目）が見つかりません");if(!editorCommentUrl)l.push("URL不足: 編集部コメント内の店舗URL（2件目）が見つかりません");if(!mapUrl)l.push("URL不足: Googleマップ（iframe）が見つかりません");if(shopInfoUrl)targetUrls.push({name:"店舗情報一覧",url:shopInfoUrl});if(editorCommentUrl)targetUrls.push({name:"編集部コメント",url:editorCommentUrl});if(mapUrl)targetUrls.push({name:"Googleマップ",url:mapUrl});var msg="【WordPressプレビュー判定結果】\n\n";msg+="📅 投稿・予約日時: "+postDateStr+"\n\n";if(m.length===0&&l.length===0&&targetUrls.length===3){msg+="✅ 問題なし（店舗URL 2件 ＋ Gマップ 1件 正常検出）\n";}else{msg+="❌ 要修正\n";if(m.length>0)msg+="\n■ 不足要素:\n・"+m.join("\n・")+"\n";if(l.length>0)msg+="\n■ 異常検出:\n・"+l.join("\n・")+"\n";}msg+="\n----------------------------------------\n";if(targetUrls.length>0){msg+="【確認対象URL（"+targetUrls.length+"件）】\n"+targetUrls.map(function(item){var shortUrl=item.url.length>45?item.url.substring(0,45)+"...":item.url;return"・["+item.name+"] "+shortUrl;}).join("\n");}else{msg+="【確認対象URL】\n・なし";}alert(msg);if(targetUrls.length>0&&confirm("確認対象のURL（"+targetUrls.length+"件）をすべて別タブで開きますか？")){setTimeout(function(){targetUrls.forEach(function(item){window.open(item.url,'_blank');});},100);}}catch(err){alert("エラー: "+err.message);}})();
+// 1. 店舗情報一覧のURL抽出
+var shopEl = allEls.find(function(el){ return el.children.length === 0 && el.innerText && el.innerText.trim().includes('店舗情報一覧'); });
+if(shopEl){
+    var cur = shopEl.closest('h1,h2,h3,h4,div,section,p') || shopEl;
+    // 見出しの周辺や次の要素から、有効な外部URLを本気で探す
+    for(let step = 0; step < 5; step++) {
+        if(!cur) break;
+        var aList = Array.from(cur.querySelectorAll('a[href]'));
+        if(cur.tagName === 'A') aList.unshift(cur);
+        
+        for(var a of aList){
+            var h = a.getAttribute('href');
+            if(isValidStoreUrl(h)){
+                shopInfoUrl = h.trim();
+                break;
+            }
+        }
+        if(shopInfoUrl) break;
+        cur = cur.nextElementSibling || cur.parentElement;
+    }
+}
