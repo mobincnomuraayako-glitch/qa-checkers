@@ -69,9 +69,45 @@
       l.push("AIコンテキストコード混入疑い");
     }
 
+    // --- ▼ 追加：所在地・アクセス周辺の対応エリア＆番地（店舗有無）の判定 ▼ ---
+    let accessText = pageText;
+    const headings = mainContent.querySelectorAll('h2, h3, h4');
+    let accessHeading = null;
+    for (let h of headings) {
+      if (h.innerText.includes("所在地・アクセス")) {
+        accessHeading = h;
+        break;
+      }
+    }
+
+    if (accessHeading) {
+      let subTexts = [];
+      let sibling = accessHeading.nextElementSibling;
+      while (sibling) {
+        if (['H2', 'H3', 'H4'].includes(sibling.tagName)) break;
+        subTexts.push(sibling.innerText);
+        sibling = sibling.nextElementSibling;
+      }
+      if (subTexts.length > 0) {
+        accessText = subTexts.join("\n");
+      }
+    }
+
+    const areaKeywords = ["対応エリア", "出張可能エリア", "出張エリア", "対象エリア"];
+    const hasAreaMention = areaKeywords.some(kw => accessText.includes(kw));
+
+    if (hasAreaMention) {
+      // 番地・丁目・号のパターン（例: 1-2-3, 1丁目, 2番地, 3号 など）
+      const banchiPattern = /\d+[\-−ー\d]+|\d+丁目|\d+番地?|\d+号/;
+      if (banchiPattern.test(accessText)) {
+        l.push("店舗あり(番地記載あり)のため『対応エリア』等の記載不可");
+      }
+    }
+    // --- ▲ ここまで追加 ▲ ---
+
     let msg = "【ココログ 判定結果】\n\n";
     if (m.length === 0 && l.length === 0) {
-      msg += "✅ 問題なし（全11項目・冒頭画像・カテゴリ・AIコード正常）";
+      msg += "✅ 問題なし（全項目・エリア判定クリア）";
     } else {
       msg += "❌ 要修正\n";
       if (m.length > 0) msg += "\n■ 不足要素:\n・" + m.join("\n・") + "\n";
