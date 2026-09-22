@@ -61,7 +61,7 @@
       l.push("AIコンテキストコード混入");
     }
 
-    // --- ▼ 所在地・アクセス周辺の対応エリア＆番地判定 ▼ ---
+    // --- ▼ 所在地・アクセス周辺の地域・対応エリア＆番地判定（柔軟化） ▼ ---
     let accessText = pageText;
     const headings = mainArea.querySelectorAll('h2, h3, h4');
     let accessHeading = null;
@@ -85,16 +85,16 @@
       }
     }
 
-    const areaKeywords = ["対応エリア", "出張可能エリア", "出張エリア", "対象エリア"];
+    const areaKeywords = ["エリア", "対象", "地域", "周辺", "近隣", "対応", "出張"];
     const hasAreaMention = areaKeywords.some(kw => accessText.includes(kw));
 
     if (hasAreaMention) {
       const banchiPattern = /\d+[\-−ー\d]+|\d+丁目|\d+番地?|\d+号/;
       if (banchiPattern.test(accessText)) {
-        l.push("店舗あり(番地記載あり)のため『対応エリア』等の記載不可");
+        l.push("店舗あり(番地記載あり)のため『対応エリア・地域』等の記載不可");
       }
     }
-    // --- ▲ ここまで追加 ▲ ---
+    // --- ▲ ここまで ▲ ---
 
     let res = "【ココログ 判定結果】\n\n";
     if (m.length === 0 && l.length === 0) {
