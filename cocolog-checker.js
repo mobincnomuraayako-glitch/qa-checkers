@@ -153,10 +153,40 @@
     }
     // --- ▲ ここまで ▲ ---
 
+    // --- ▼ 追加：設備セクションの禁止ワード（サービス・特徴文言）チェック ▼ ---
+    let equipmentText = "";
+    let equipmentHeading = null;
+    for (let h of headings) {
+      if (h.innerText.includes("設備")) {
+        equipmentHeading = h;
+        break;
+      }
+    }
+
+    if (equipmentHeading) {
+      let subTexts = [];
+      let sibling = equipmentHeading.nextElementSibling;
+      while (sibling) {
+        if (['H2', 'H3', 'H4'].includes(sibling.tagName)) break;
+        subTexts.push(sibling.innerText);
+        sibling = sibling.nextElementSibling;
+      }
+      if (subTexts.length > 0) {
+        equipmentText = subTexts.join("\n");
+      }
+    }
+
+    const ngEquipmentKeywords = ["スタッフ", "対応", "マンツーマン", "施術", "空間", "特徴"];
+    const foundNgKeywords = ngEquipmentKeywords.filter(kw => equipmentText.includes(kw));
+    if (foundNgKeywords.length > 0 && !equipmentText.includes("公開情報では確認できませんでした")) {
+      l.push("設備セクションにサービスや特徴の文言混入 (検出ワード: " + foundNgKeywords.join(", ") + ")");
+    }
+    // --- ▲ ここまで追加 ▲ ---
+
     // --- ▼ HTML出力・リンク確認ボタン付きUIの生成 ▼ ---
     let resHtml = "<h2 style='margin-top:0; font-size:18px;'>【ココログ 判定結果】</h2>";
     if (m.length === 0 && l.length === 0) {
-      resHtml += "<p style='color:green; font-weight:bold;'>✅ 問題なし（全項目・リンク・エリア判定 正常）</p>";
+      resHtml += "<p style='color:green; font-weight:bold;'>✅ 問題なし（全項目・リンク・エリア・設備判定 正常）</p>";
     } else {
       resHtml += "<p style='color:red; font-weight:bold;'>❌ 要修正</p>";
       if (m.length > 0) {
@@ -171,12 +201,10 @@
       }
     }
 
-    // 検出されたリンクを開くための確認セクションを追加
     if (detectedUrls.length > 0) {
       resHtml += "<hr style='margin:15px 0; border:0; border-top:1px solid #ddd;'>";
       resHtml += "<p style='font-weight:bold; margin-bottom:5px;'>🔗 検出されたリンクの生存確認（クリックで別タブオープン）:</p>";
       resHtml += "<ul style='margin:0; padding-left:20px;'>";
-      // 重複を除外してリスト化
       const uniqueUrls = Array.from(new Set(detectedUrls.map(d => d.url)))
         .map(url => detectedUrls.find(d => d.url === url));
       
