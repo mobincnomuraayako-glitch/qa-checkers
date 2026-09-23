@@ -1,16 +1,6 @@
 (function(){
   try {
-    let targetDoc = document;
-    const iframes = document.querySelectorAll('iframe');
-    for (let i = 0; i < iframes.length; i++) {
-      try {
-        if (iframes[i].contentDocument && iframes[i].contentDocument.querySelector('.entry-body, .entry-content, .entry, body')) {
-          targetDoc = iframes[i].contentDocument;
-          break;
-        }
-      } catch(e) {}
-    }
-
+    const targetDoc = document;
     const r = ["基本情報","店舗概要","所在地・アクセス","営業時間・定休日","サービス","設備","店舗情報一覧","まとめ","FAQ","編集部コメント","Googleマップ"];
     let m = [], l = [];
 
@@ -18,18 +8,6 @@
     const fullHtml = targetDoc.body ? targetDoc.body.innerHTML : "";
     const mainArea = targetDoc.querySelector('.entry-body,.entry-content,.entry,.entry-inner,#alpha-inner') || targetDoc.body;
     
-    const gI = mainArea.querySelector('iframe[src*="maps.google.com"],iframe[src*="google.com/maps"]');
-    const gA = mainArea.querySelector('a[href*="maps.google.com"],a[href*="google.com/maps"],a[href*="goo.gl/maps"]');
-
-    function hP(u){
-      if (!u) return false;
-      return /[?&](q|query|cid)=/.test(u) || /!3d[-0-9.]*!4d[-0-9.]*/.test(u) || u.includes('maps.google.com/1');
-    }
-
-    let mU = "";
-    if (gI) mU = gI.getAttribute('src') || "";
-    else if (gA) mU = gA.getAttribute('href') || "";
-
     const txE = targetDoc.querySelector('.entry-header,.entry-title,h3.entry-header,h1,.entry-subject');
     const tx = txE ? txE.innerText.trim() : "";
     if (!tx) m.push("記事タイトル");
@@ -44,6 +22,18 @@
     if (!pageText.includes("カテゴリ") || pageText.includes("カテゴリ：未分類") || pageText.includes("カテゴリー：未分類")){
       m.push("カテゴリ（設定なしまたは未分類）");
     }
+
+    const gI = mainArea.querySelector('iframe[src*="maps.google.com"],iframe[src*="google.com/maps"]');
+    const gA = mainArea.querySelector('a[href*="maps.google.com"],a[href*="google.com/maps"],a[href*="goo.gl/maps"],a[href*="maps.app.goo.gl"]');
+
+    function hP(u){
+      if (!u) return false;
+      return /[?&](q|query|cid)=/.test(u) || /!3d[-0-9.]*!4d[-0-9.]*/.test(u) || u.includes('maps.google.com/1') || u.includes('maps.app.goo.gl');
+    }
+
+    let mU = "";
+    if (gI) mU = gI.getAttribute('src') || "";
+    else if (gA) mU = gA.getAttribute('href') || "";
 
     r.forEach(i => {
       if (i === "Googleマップ") {
@@ -61,66 +51,43 @@
       l.push("AIコンテキストコード混入");
     }
 
-    // --- ▼ 必須リンク・URLの抽出（確認用ボタン作成のため） ▼ ---
+    // --- ▼ 必須リンク・URLの強力な抽出処理 ▼ ---
     const allLinks = mainArea.querySelectorAll('a[href]');
     let detectedUrls = [];
-    let hasGmapSectionLink = false;
-
-    const headings = mainArea.querySelectorAll('h2, h3, h4');
-    let gmapHeading = null;
-    for (let h of headings) {
-      if (h.innerText.includes("Googleマップ")) {
-        gmapHeading = h;
-        break;
-      }
-    }
-
-    if (gmapHeading) {
-      let sibling = gmapHeading.nextElementSibling;
-      while (sibling) {
-        if (sibling.tagName === 'A' && (sibling.href.includes('maps.google.com') || sibling.href.includes('google.com/maps') || sibling.href.includes('goo.gl/maps'))) {
-          hasGmapSectionLink = true;
-          detectedUrls.push({name: "Googleマップ", url: sibling.href});
-          break;
-        }
-        if (sibling.querySelector) {
-          const innerA = sibling.querySelector('a[href*="maps"]');
-          if (innerA) {
-            hasGmapSectionLink = true;
-            detectedUrls.push({name: "Googleマップ", url: innerA.href});
-            break;
-          }
-        }
-        sibling = sibling.nextElementSibling;
-      }
-    }
-    if (gI) {
-      hasGmapSectionLink = true;
-      detectedUrls.push({name: "Googleマップ(埋め込みSRC)", url: gI.src});
-    } else if (gA) {
-      hasGmapSectionLink = true;
-      detectedUrls.push({name: "Googleマップ", url: gA.href});
-    }
-
     let officialLinkCount = 0;
+    let hasGmapLink = (gI || gA);
+
     allLinks.forEach(a => {
       const href = a.getAttribute('href');
-      if (href && href.startsWith('http') && !href.includes('cocolog-nifty.com') && !href.includes('google.com') && !href.includes('maps.app.goo.gl')) {
+      if (!href || !href.startsWith('http')) return;
+
+      // Googleマップ系リンクの判定
+      if (href.includes('maps.google.com') || href.includes('google.com/maps') || href.includes('goo.gl/maps') || href.includes('maps.app.goo.gl')) {
+        hasGmapLink = true;
+        detectedUrls.push({name: "Googleマップリンク", url: href});
+      }
+      // ココログ自身やGoogle検索等を除外した「外部サイト（公式サイトなど）」の判定
+      else if (!href.includes('cocolog-nifty.com') && !href.includes('google.com')) {
         officialLinkCount++;
-        detectedUrls.push({name: "公式サイト/外部リンク", url: href});
+        detectedUrls.push({name: "公式サイト/外部リンク (" + officialLinkCount + "つ目)", url: href});
       }
     });
+
+    if (gI) {
+      detectedUrls.push({name: "Googleマップ(埋め込み)", url: gI.src});
+    }
 
     if (officialLinkCount < 2) {
       m.push("公式サイトのリンク不足（店舗情報一覧または編集部コメントのリンクが未設置/テキスト化の可能性）");
     }
-    if (!hasGmapSectionLink) {
+    if (!hasGmapLink) {
       m.push("Googleマップセクションのリンク（または埋め込み）が未設置");
     }
     // --- ▲ ここまで ▲ ---
 
     // --- ▼ 所在地・アクセス周辺の地域・対応エリア＆番地判定 ▼ ---
     let accessText = pageText;
+    const headings = mainArea.querySelectorAll('h2, h3, h4');
     let accessHeading = null;
     for (let h of headings) {
       if (h.innerText.includes("所在地・アクセス")) {
@@ -153,7 +120,7 @@
     }
     // --- ▲ ここまで ▲ ---
 
-    // --- ▼ 追加：設備セクションの禁止ワード（サービス・特徴文言）チェック ▼ ---
+    // --- ▼ 追加：設備セクションの禁止ワードチェック ▼ ---
     let equipmentText = "";
     let equipmentHeading = null;
     for (let h of headings) {
@@ -209,7 +176,7 @@
         .map(url => detectedUrls.find(d => d.url === url));
       
       uniqueUrls.forEach(d => {
-        resHtml += `<li style='margin-bottom:4px;'><a href='${d.url}' target='_blank' style='color:#007bff; text-decoration:underline;'>[${d.name}] ${d.url}</a></li>`;
+        resHtml += `<li style='margin-bottom:6px;'><a href='${d.url}' target='_blank' style='color:#007bff; text-decoration:underline; font-weight:bold;'>[${d.name}]<br><span style='font-size:11px; color:#555;'>${d.url}</span></a></li>`;
       });
       resHtml += "</ul>";
     }
