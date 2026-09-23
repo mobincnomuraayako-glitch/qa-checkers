@@ -61,12 +61,11 @@
       l.push("AIコンテキストコード混入");
     }
 
-    // --- ▼ 追加：3つの必須リンク（店舗情報一覧の公式、編集部コメントの公式、最後のGmap）のチェック ▼ ---
+    // --- ▼ 3つの必須リンク（店舗情報一覧の公式、編集部コメントの公式、最後のGmap）のチェック ▼ ---
     const allLinks = mainArea.querySelectorAll('a[href]');
     let officialLinkCount = 0;
     let hasGmapSectionLink = false;
 
-    // 「Googleマップ」見出し以降にあるリンクまたはiframeをGmapとして判定
     const headings = mainArea.querySelectorAll('h2, h3, h4');
     let gmapHeading = null;
     for (let h of headings) {
@@ -94,7 +93,6 @@
       hasGmapSectionLink = true;
     }
 
-    // 本文全体の有効な外部公式サイトリンク（cocologやgoogle以外）をカウント
     allLinks.forEach(a => {
       const href = a.getAttribute('href');
       if (href && href.startsWith('http') && !href.includes('cocolog-nifty.com') && !href.includes('google.com') && !href.includes('maps.app.goo.gl')) {
@@ -108,9 +106,9 @@
     if (!hasGmapSectionLink) {
       m.push("Googleマップセクションのリンク（または埋め込み）が未設置");
     }
-    // --- ▲ ここまで追加 ▲ ---
+    // --- ▲ ここまで ▲ ---
 
-    // --- ▼ 所在地・アクセス周辺の地域・対応エリア＆番地判定（柔軟化） ▼ ---
+    // --- ▼ 所在地・アクセス周辺の地域・対応エリア＆番地判定 ▼ ---
     let accessText = pageText;
     let accessHeading = null;
     for (let h of headings) {
@@ -144,15 +142,43 @@
     }
     // --- ▲ ここまで ▲ ---
 
-    let res = "【ココログ 判定結果】\n\n";
+    let resHtml = "<h2>【ココログ 判定結果】</h2>";
     if (m.length === 0 && l.length === 0) {
-      res += "✅ 問題なし（全項目・リンク・エリア判定 正常）";
+      resHtml += "<p style='color:green; font-weight:bold;'>✅ 問題なし（全項目・リンク・エリア判定 正常）</p>";
     } else {
-      res += "❌ 要修正\n";
-      if (m.length > 0) res += "\n■ 不足要素:\n・" + m.join("\n・") + "\n";
-      if (l.length > 0) res += "\n■ 異常検出:\n・" + l.join("\n・") + "\n";
+      resHtml += "<p style='color:red; font-weight:bold;'>❌ 要修正</p>";
+      if (m.length > 0) {
+        resHtml += "<p style='font-weight:bold; margin-top:10px;'>■ 不足要素:</p><ul style='margin:0; padding-left:20px;'>";
+        m.forEach(item => resHtml += "<li>" + item + "</li>");
+        resHtml += "</ul>";
+      }
+      if (l.length > 0) {
+        resHtml += "<p style='font-weight:bold; margin-top:10px;'>■ 異常検出:</p><ul style='margin:0; padding-left:20px;'>";
+        l.forEach(item => resHtml += "<li>" + item + "</li>");
+        resHtml += "</ul>";
+      }
     }
-    alert(res);
+
+    // --- ▼ 画面スクロール可能なカスタムモーダルを表示 ▼ ---
+    const oldModal = document.getElementById('cocolog-checker-modal');
+    if (oldModal) oldModal.remove();
+
+    const overlay = document.createElement('div');
+    overlay.id = 'cocolog-checker-modal';
+    overlay.style.cssText = "position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:999999; display:flex; align-items:center; justify-content:center; font-family:sans-serif;";
+    
+    const box = document.createElement('div');
+    box.style.cssText = "background:#fff; padding:20px 25px; border-radius:8px; width:90%; max-width:500px; max-height:80vh; overflow-y:auto; box-shadow:0 4px 15px rgba(0,0,0,0.3); font-size:14px; color:#333; line-height:1.5;";
+    box.innerHTML = resHtml;
+
+    const closeBtn = document.createElement('button');
+    closeBtn.innerText = "閉じる";
+    closeBtn.style.cssText = "display:block; width:100%; margin-top:20px; padding:10px; background:#007bff; color:#fff; border:none; border-radius:4px; font-size:16px; cursor:pointer; font-weight:bold;";
+    closeBtn.onclick = function() { overlay.remove(); };
+
+    box.appendChild(closeBtn);
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
 
   } catch(e) {
     alert("判定エラー: " + e.message);
