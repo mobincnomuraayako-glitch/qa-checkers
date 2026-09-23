@@ -61,9 +61,9 @@
       l.push("AIコンテキストコード混入");
     }
 
-    // --- ▼ 3つの必須リンク（店舗情報一覧の公式、編集部コメントの公式、最後のGmap）のチェック ▼ ---
+    // --- ▼ 必須リンク・URLの抽出（確認用ボタン作成のため） ▼ ---
     const allLinks = mainArea.querySelectorAll('a[href]');
-    let officialLinkCount = 0;
+    let detectedUrls = [];
     let hasGmapSectionLink = false;
 
     const headings = mainArea.querySelectorAll('h2, h3, h4');
@@ -80,23 +80,34 @@
       while (sibling) {
         if (sibling.tagName === 'A' && (sibling.href.includes('maps.google.com') || sibling.href.includes('google.com/maps') || sibling.href.includes('goo.gl/maps'))) {
           hasGmapSectionLink = true;
+          detectedUrls.push({name: "Googleマップ", url: sibling.href});
           break;
         }
-        if (sibling.querySelector && sibling.querySelector('a[href*="maps"], iframe[src*="maps"]')) {
-          hasGmapSectionLink = true;
-          break;
+        if (sibling.querySelector) {
+          const innerA = sibling.querySelector('a[href*="maps"]');
+          if (innerA) {
+            hasGmapSectionLink = true;
+            detectedUrls.push({name: "Googleマップ", url: innerA.href});
+            break;
+          }
         }
         sibling = sibling.nextElementSibling;
       }
     }
-    if (gI || gA) {
+    if (gI) {
       hasGmapSectionLink = true;
+      detectedUrls.push({name: "Googleマップ(埋め込みSRC)", url: gI.src});
+    } else if (gA) {
+      hasGmapSectionLink = true;
+      detectedUrls.push({name: "Googleマップ", url: gA.href});
     }
 
+    let officialLinkCount = 0;
     allLinks.forEach(a => {
       const href = a.getAttribute('href');
       if (href && href.startsWith('http') && !href.includes('cocolog-nifty.com') && !href.includes('google.com') && !href.includes('maps.app.goo.gl')) {
         officialLinkCount++;
+        detectedUrls.push({name: "公式サイト/外部リンク", url: href});
       }
     });
 
@@ -142,7 +153,8 @@
     }
     // --- ▲ ここまで ▲ ---
 
-    let resHtml = "<h2>【ココログ 判定結果】</h2>";
+    // --- ▼ HTML出力・リンク確認ボタン付きUIの生成 ▼ ---
+    let resHtml = "<h2 style='margin-top:0; font-size:18px;'>【ココログ 判定結果】</h2>";
     if (m.length === 0 && l.length === 0) {
       resHtml += "<p style='color:green; font-weight:bold;'>✅ 問題なし（全項目・リンク・エリア判定 正常）</p>";
     } else {
@@ -159,7 +171,21 @@
       }
     }
 
-    // --- ▼ 画面スクロール可能なカスタムモーダルを表示 ▼ ---
+    // 検出されたリンクを開くための確認セクションを追加
+    if (detectedUrls.length > 0) {
+      resHtml += "<hr style='margin:15px 0; border:0; border-top:1px solid #ddd;'>";
+      resHtml += "<p style='font-weight:bold; margin-bottom:5px;'>🔗 検出されたリンクの生存確認（クリックで別タブオープン）:</p>";
+      resHtml += "<ul style='margin:0; padding-left:20px;'>";
+      // 重複を除外してリスト化
+      const uniqueUrls = Array.from(new Set(detectedUrls.map(d => d.url)))
+        .map(url => detectedUrls.find(d => d.url === url));
+      
+      uniqueUrls.forEach(d => {
+        resHtml += `<li style='margin-bottom:4px;'><a href='${d.url}' target='_blank' style='color:#007bff; text-decoration:underline;'>[${d.name}] ${d.url}</a></li>`;
+      });
+      resHtml += "</ul>";
+    }
+
     const oldModal = document.getElementById('cocolog-checker-modal');
     if (oldModal) oldModal.remove();
 
@@ -168,12 +194,12 @@
     overlay.style.cssText = "position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:999999; display:flex; align-items:center; justify-content:center; font-family:sans-serif;";
     
     const box = document.createElement('div');
-    box.style.cssText = "background:#fff; padding:20px 25px; border-radius:8px; width:90%; max-width:500px; max-height:80vh; overflow-y:auto; box-shadow:0 4px 15px rgba(0,0,0,0.3); font-size:14px; color:#333; line-height:1.5;";
+    box.style.cssText = "background:#fff; padding:20px 25px; border-radius:8px; width:90%; max-width:550px; max-height:85vh; overflow-y:auto; box-shadow:0 4px 15px rgba(0,0,0,0.3); font-size:13px; color:#333; line-height:1.5; word-break:break-all;";
     box.innerHTML = resHtml;
 
     const closeBtn = document.createElement('button');
     closeBtn.innerText = "閉じる";
-    closeBtn.style.cssText = "display:block; width:100%; margin-top:20px; padding:10px; background:#007bff; color:#fff; border:none; border-radius:4px; font-size:16px; cursor:pointer; font-weight:bold;";
+    closeBtn.style.cssText = "display:block; width:100%; margin-top:20px; padding:10px; background:#007bff; color:#fff; border:none; border-radius:4px; font-size:15px; cursor:pointer; font-weight:bold;";
     closeBtn.onclick = function() { overlay.remove(); };
 
     box.appendChild(closeBtn);
