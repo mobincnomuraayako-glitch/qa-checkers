@@ -61,9 +61,57 @@
       l.push("AIコンテキストコード混入");
     }
 
+    // --- ▼ 追加：3つの必須リンク（店舗情報一覧の公式、編集部コメントの公式、最後のGmap）のチェック ▼ ---
+    const allLinks = mainArea.querySelectorAll('a[href]');
+    let officialLinkCount = 0;
+    let hasGmapSectionLink = false;
+
+    // 「Googleマップ」見出し以降にあるリンクまたはiframeをGmapとして判定
+    const headings = mainArea.querySelectorAll('h2, h3, h4');
+    let gmapHeading = null;
+    for (let h of headings) {
+      if (h.innerText.includes("Googleマップ")) {
+        gmapHeading = h;
+        break;
+      }
+    }
+
+    if (gmapHeading) {
+      let sibling = gmapHeading.nextElementSibling;
+      while (sibling) {
+        if (sibling.tagName === 'A' && (sibling.href.includes('maps.google.com') || sibling.href.includes('google.com/maps') || sibling.href.includes('goo.gl/maps'))) {
+          hasGmapSectionLink = true;
+          break;
+        }
+        if (sibling.querySelector && sibling.querySelector('a[href*="maps"], iframe[src*="maps"]')) {
+          hasGmapSectionLink = true;
+          break;
+        }
+        sibling = sibling.nextElementSibling;
+      }
+    }
+    if (gI || gA) {
+      hasGmapSectionLink = true;
+    }
+
+    // 本文全体の有効な外部公式サイトリンク（cocologやgoogle以外）をカウント
+    allLinks.forEach(a => {
+      const href = a.getAttribute('href');
+      if (href && href.startsWith('http') && !href.includes('cocolog-nifty.com') && !href.includes('google.com') && !href.includes('maps.app.goo.gl')) {
+        officialLinkCount++;
+      }
+    });
+
+    if (officialLinkCount < 2) {
+      m.push("公式サイトのリンク不足（店舗情報一覧または編集部コメントのリンクが未設置/テキスト化の可能性）");
+    }
+    if (!hasGmapSectionLink) {
+      m.push("Googleマップセクションのリンク（または埋め込み）が未設置");
+    }
+    // --- ▲ ここまで追加 ▲ ---
+
     // --- ▼ 所在地・アクセス周辺の地域・対応エリア＆番地判定（柔軟化） ▼ ---
     let accessText = pageText;
-    const headings = mainArea.querySelectorAll('h2, h3, h4');
     let accessHeading = null;
     for (let h of headings) {
       if (h.innerText.includes("所在地・アクセス")) {
@@ -98,7 +146,7 @@
 
     let res = "【ココログ 判定結果】\n\n";
     if (m.length === 0 && l.length === 0) {
-      res += "✅ 問題なし（全項目・エリア判定 正常）";
+      res += "✅ 問題なし（全項目・リンク・エリア判定 正常）";
     } else {
       res += "❌ 要修正\n";
       if (m.length > 0) res += "\n■ 不足要素:\n・" + m.join("\n・") + "\n";
