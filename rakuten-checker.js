@@ -42,9 +42,8 @@
       issues.push("AI参照コード混入疑い: 「cit_...」「context」等のAIコード・属性が検出されました");
     }
 
-    // 8. AI「入力」不適切回答チェック（電話番号除外 ＆ 検知パターン拡張版）
+    // 8. AI「入力」不適切回答チェック
     const rawMainText = b.innerText || "";
-    // 電話番号（0X-XXXX-XXXX 等）を除外して誤検知を防ぐ
     const cleanMainText = rawMainText.replace(/0\d{1,4}-\d{1,4}-\d{3,4}/g, "");
     const aiPatterns = ["入力されています", "入力情報では", "入力されていません", "入力情報", "「-」と入力", "は「-」"];
     let foundAiWords = [];
@@ -56,6 +55,27 @@
     if (foundAiWords.length > 0) {
       issues.push("AI異常文言検出: 本文/Q&A内に「" + Array.from(new Set(foundAiWords)).join("」「") + "」が含まれています");
     }
+
+    // --- ▼ 追加：H1〜H3見出しおよび本文中の連続重複ワード判定（「葬儀葬儀」など） ▼ ---
+    const headings = b.querySelectorAll('h1, h2, h3');
+    headings.forEach(function(h){
+        const ht = h.innerText.trim();
+        if(/([一-龥]{2,})\1/.test(ht) || /([\u3040-\u309F]{2,})\1/.test(ht)) {
+            issues.push("見出しの重複異常(連続ワード): " + ht);
+        }
+    });
+
+    const paragraphs = b.querySelectorAll('p, li');
+    paragraphs.forEach(function(p){
+        const pt = p.innerText.trim();
+        const matchKanji = pt.match(/([一-龥]{2,})\1/);
+        const matchHira = pt.match(/([\u3040-\u309F]{2,})\1/);
+        if((matchKanji || matchHira) && !issues.some(function(msg){ return msg.includes("本文中の重複異常"); })) {
+            const dupWord = matchKanji ? matchKanji[1] : matchHira[1];
+            issues.push("本文中の重複異常(連続ワード検知): " + dupWord);
+        }
+    });
+    // --- ▲ ここまで追加 ▲ ---
 
     // 9. 編集部コメントURL判定
     const ci = pageText.indexOf("編集部コメント");
@@ -117,7 +137,7 @@
     // 結果表示メッセージ
     let msg = "【楽天ブログ判定結果】\n\n";
     if(missing.length === 0 && issues.length === 0){
-      msg += "✅ 問題なし（全11項目・冒頭画像・カテゴリ・AIコード・AI不適切文言正常）\n";
+      msg += "✅ 問題なし（全項目・冒頭画像・カテゴリ・AIコード・AI不適切文言・重複ワード正常）\n";
     } else {
       msg += "❌ 要修正\n";
       if(missing.length > 0) msg += "\n■ 不足要素:\n・" + missing.join("\n・") + "\n";
@@ -134,7 +154,7 @@
     alert(msg);
 
     // リンクの一括展開
-    if(finalUrlList.length > 0 && confirm("検出された上記の対象リンク（" + finalUrlList.length + "件）をすべて別タブで開いて確認しますか？")){
+    if(finalUrlList.length > 0 && confirm("確認対象のリンク（" + finalUrlList.length + "件）をすべて別タブで開きますか？")){
       setTimeout(function(){
         finalUrlList.forEach(function(url){
           window.open(url, '_blank');
