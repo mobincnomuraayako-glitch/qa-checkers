@@ -51,6 +51,27 @@
       l.push("AIコンテキストコード混入");
     }
 
+    // --- ▼ 追加：H1〜H3見出しおよび本文中の連続重複ワード判定（「葬儀葬儀」など） ▼ ---
+    const headingsForDup = mainArea.querySelectorAll('h1, h2, h3');
+    headingsForDup.forEach(function(h){
+        const ht = h.innerText.trim();
+        if(/([一-龥]{2,})\1/.test(ht) || /([\u3040-\u309F]{2,})\1/.test(ht)) {
+            l.push("見出しの重複異常(連続ワード): " + ht);
+        }
+    });
+
+    const paragraphsForDup = mainArea.querySelectorAll('p, li');
+    paragraphsForDup.forEach(function(p){
+        const pt = p.innerText.trim();
+        const matchKanji = pt.match(/([一-龥]{2,})\1/);
+        const matchHira = pt.match(/([\u3040-\u309F]{2,})\1/);
+        if((matchKanji || matchHira) && !l.some(function(msg){ return msg.includes("本文中の重複異常"); })) {
+            const dupWord = matchKanji ? matchKanji[1] : matchHira[1];
+            l.push("本文中の重複異常(連続ワード検知): " + dupWord);
+        }
+    });
+    // --- ▲ ここまで追加 ▲ ---
+
     // --- ▼ 必須リンク・URLの強力な抽出処理 ▼ ---
     const allLinks = mainArea.querySelectorAll('a[href]');
     let detectedUrls = [];
@@ -61,12 +82,10 @@
       const href = a.getAttribute('href');
       if (!href || !href.startsWith('http')) return;
 
-      // Googleマップ系リンクの判定
       if (href.includes('maps.google.com') || href.includes('google.com/maps') || href.includes('goo.gl/maps') || href.includes('maps.app.goo.gl')) {
         hasGmapLink = true;
         detectedUrls.push({name: "Googleマップリンク", url: href});
       }
-      // ココログ自身やGoogle検索等を除外した「外部サイト（公式サイトなど）」の判定
       else if (!href.includes('cocolog-nifty.com') && !href.includes('google.com')) {
         officialLinkCount++;
         detectedUrls.push({name: "公式サイト/外部リンク (" + officialLinkCount + "つ目)", url: href});
@@ -120,7 +139,7 @@
     }
     // --- ▲ ここまで ▲ ---
 
-    // --- ▼ 追加：設備セクションの禁止ワードチェック ▼ ---
+    // --- ▼ 設備セクションの禁止ワードチェック ▼ ---
     let equipmentText = "";
     let equipmentHeading = null;
     for (let h of headings) {
@@ -153,7 +172,7 @@
     // --- ▼ HTML出力・リンク確認ボタン付きUIの生成 ▼ ---
     let resHtml = "<h2 style='margin-top:0; font-size:18px;'>【ココログ 判定結果】</h2>";
     if (m.length === 0 && l.length === 0) {
-      resHtml += "<p style='color:green; font-weight:bold;'>✅ 問題なし（全項目・リンク・エリア・設備判定 正常）</p>";
+      resHtml += "<p style='color:green; font-weight:bold;'>✅ 問題なし（全項目・リンク・エリア・設備・重複ワード正常）</p>";
     } else {
       resHtml += "<p style='color:red; font-weight:bold;'>❌ 要修正</p>";
       if (m.length > 0) {
