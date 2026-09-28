@@ -37,6 +37,27 @@
       issues.push("AI参照コード混入疑い: 「cit_...」「context」等のAIコード・属性が検出されました");
     }
 
+    // --- ▼ 追加：H1〜H3見出しおよび本文中の連続重複ワード判定（「葬儀葬儀」など） ▼ ---
+    const headingsForDup = b.querySelectorAll('h1, h2, h3');
+    headingsForDup.forEach(function(h){
+        const ht = h.innerText.trim();
+        if(/([一-龥]{2,})\1/.test(ht) || /([\u3040-\u309F]{2,})\1/.test(ht)) {
+            issues.push("見出しの重複異常(連続ワード): " + ht);
+        }
+    });
+
+    const paragraphsForDup = b.querySelectorAll('p, li');
+    paragraphsForDup.forEach(function(p){
+        const pt = p.innerText.trim();
+        const matchKanji = pt.match(/([一-龥]{2,})\1/);
+        const matchHira = pt.match(/([\u3040-\u309F]{2,})\1/);
+        if((matchKanji || matchHira) && !issues.some(function(msg){ return msg.includes("本文中の重複異常"); })) {
+            const dupWord = matchKanji ? matchKanji[1] : matchHira[1];
+            issues.push("本文中の重複異常(連続ワード検知): " + dupWord);
+        }
+    });
+    // --- ▲ ここまで追加 ▲ ---
+
     // 7. 編集部コメントURL判定
     const ci = pageText.indexOf("編集部コメント");
     if(ci !== -1){
@@ -92,9 +113,9 @@
     }
 
     // 結果表示
-    let msg = "【ALIS判定結果】\n";
+    let msg = "【ALIS判定結果】\n\n";
     if(missing.length === 0 && issues.length === 0){
-      msg += "✅ 問題なし（全11項目・冒頭画像・カテゴリ・AIコード・対象リンク別窓正常: " + extLinks.length + "件検知）";
+      msg += "✅ 問題なし（全項目・冒頭画像・カテゴリ・AIコード・重複ワード・対象リンク別窓正常: " + extLinks.length + "件検知）";
     } else {
       msg += "❌ 要修正\n\n";
       if(missing.length > 0) msg += "■ 不足要素:\n・" + missing.join("\n・") + "\n\n";
