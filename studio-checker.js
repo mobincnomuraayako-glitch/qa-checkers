@@ -11,33 +11,56 @@
     const txt = txtEl ? txtEl.innerText.trim() : "";
     if(!txt) missing.push("記事タイトル");
 
-    // 2. 冒頭画像チェック
+    // 2. 本文エリアの特定
     const b = document.querySelector('main, article, .article-body, [class*="content"]') || document.body;
+    
+    // 3. 冒頭画像チェック
     const firstImg = b ? b.querySelector('img') : null;
     if(!firstImg) missing.push("冒頭画像（本文内に画像が見つかりません）");
 
-    // 3. タイトル地名チェック
+    // 4. タイトル地名チェック
     if(txt && (/^(北海道|青森県|岩手県|宮城県|秋田県|山形県|福島県|茨城県|栃木県|群馬県|埼玉県|千葉県|東京都|神奈川県|新潟県|富山県|石川県|福井県|山梨県|長野県|岐阜県|静岡県|愛知県|三重県|滋賀県|京都府|大阪府|兵庫県|奈良県|和歌山県|鳥取県|島根県|岡山県|広島県|山口県|徳島県|香川県|愛媛県|高知県|福岡県|佐賀県|長崎県|熊本県|大分県|宮崎県|鹿児島県|沖縄県)/.test(txt) || /^.{1,5}[市区町村]/.test(txt))){
-      issues.push("タイトル異常: 先頭が地名（「" + txt.substring(0,8) + "…」）");
+      issues.push("タイトル異常: 先頭が地名（クエリ確認要）");
     }
 
-    // 4. カテゴリチェック
+    // 5. カテゴリチェック
     if(!pageText.includes("カテゴリ") || pageText.includes("カテゴリ：未分類")){
       missing.push("カテゴリ（設定なしまたは未分類）");
     }
 
-    // 5. 必須要素チェック
+    // 6. 必須要素チェック
     const requiredItems = ["基本情報","店舗概要","所在地・アクセス","営業時間・定休日","サービス","設備","店舗情報一覧","まとめ","FAQ","編集部コメント","Googleマップ"];
     requiredItems.forEach(item => {
       if(!pageText.includes(item)) missing.push(item);
     });
 
-    // 6. AI参照コード混入チェック
+    // 7. AI参照コード混入チェック
     if(/cit_[a-zA-Z0-9_-]{3,}/i.test(fullHtml) || /data-cit/i.test(fullHtml) || /context[a-zA-Z0-9_-]*/i.test(fullHtml.slice(-2000)) || /cite/i.test(fullHtml.slice(-2000))){
       issues.push("AI参照コード混入疑い: 「cit_...」「context」等のAIコード・属性が検出されました");
     }
 
-    // 7. 編集部コメントURL判定
+    // --- ▼ 追加：H1〜H3見出しおよび本文中の連続重複ワード判定（「葬儀葬儀」など） ▼ ---
+    const headingsForDup = b.querySelectorAll('h1, h2, h3, .heading-1, .heading-2, .heading-3');
+    headingsForDup.forEach(function(h){
+        const ht = h.innerText.trim();
+        if(/([一-龥]{2,})\1/.test(ht) || /([\u3040-\u309F]{2,})\1/.test(ht)) {
+            issues.push("見出しの重複異常(連続ワード): " + ht);
+        }
+    });
+
+    const paragraphsForDup = b.querySelectorAll('p, li');
+    paragraphsForDup.forEach(function(p){
+        const pt = p.innerText.trim();
+        const matchKanji = pt.match(/([一-龥]{2,})\1/);
+        const matchHira = pt.match(/([\u3040-\u309F]{2,})\1/);
+        if((matchKanji || matchHira) && !issues.some(function(msg){ return msg.includes("本文中の重複異常"); })) {
+            const dupWord = matchKanji ? matchKanji[1] : matchHira[1];
+            issues.push("本文中の重複異常(連続ワード検知): " + dupWord);
+        }
+    });
+    // --- ▲ ここまで追加 ▲ ---
+
+    // 8. 編集部コメントURL判定
     const ci = pageText.indexOf("編集部コメント");
     if(ci !== -1){
       let ct = pageText.substring(ci);
@@ -49,9 +72,9 @@
       }
     }
 
-    // 8. リンク（店舗情報一覧・編集部コメント・マップ）別窓チェック
+    // 9. リンク（店舗情報一覧・編集部コメント・マップ）別窓チェック
     const currentHost = location.hostname;
-    let rawTargetLinks = Array.from(document.querySelectorAll('td a'));
+    let rawTargetLinks = Array.from(document.querySelectorAll('td a, .w-richtext a'));
 
     Array.from(document.querySelectorAll('a')).forEach(a => {
       const h = a.getAttribute('href') || '';
@@ -92,9 +115,9 @@
     }
 
     // 結果表示
-    let msg = "【STUDIO判定結果】\n";
+    let msg = "【STUDIO判定結果】\n\n";
     if(missing.length === 0 && issues.length === 0){
-      msg += "✅ 問題なし（全11項目・冒頭画像・カテゴリ・AIコード・対象リンク別窓正常: " + extLinks.length + "件検知）";
+      msg += "✅ 問題なし（全項目・冒頭画像・カテゴリ・AIコード・重複ワード・対象リンク別窓正常: " + extLinks.length + "件検知）";
     } else {
       msg += "❌ 要修正\n\n";
       if(missing.length > 0) msg += "■ 不足要素:\n・" + missing.join("\n・") + "\n\n";
