@@ -1,18 +1,24 @@
 (async function(){
     try {
+        // 1. チェック対象となるWordPress記事のURL入力を促すプロンプトを表示
         var inputUrls = prompt("チェックしたいWordPress記事のURLを貼り付けてください（複数ある場合は改行またはカンマ区切り）：\n※現在開いているページをチェックしたい場合は、何も入力せずOKを押してください。");
         
         var urlsToProcess = [];
         if (inputUrls && inputUrls.trim() !== "") {
+            // 改行またはカンマ区切りで入力されたURLを配列に分割・整形
             urlsToProcess = inputUrls.split(/[\n,]/).map(function(u){ return u.trim(); }).filter(function(u){ return u.length > 0; });
         } else {
+            // 未入力の場合は現在開いているページを対象にする
             urlsToProcess = [window.location.href];
         }
 
         var resultsSummary = [];
+        // 記事内に必須のチェック項目見出しリスト
         var r = ["基本情報", "店舗概要", "所在地・アクセス", "営業時間・定休日", "サービス", "設備", "店舗情報一覧", "まとめ", "FAQ", "編集部コメント", "Googleマップ"];
+        // 都道府県リスト（タイトル先頭の地名チェック用）
         var prefs = ["北海道", "青森県", "岩手県", "宮城県", "秋田県", "山形県", "福島県", "茨城県", "栃木県", "群馬県", "埼玉県", "千葉県", "東京都", "神奈川県", "新潟県", "富山県", "石川県", "福井県", "山梨県", "長野県", "岐阜県", "静岡県", "愛知県", "三重県", "滋賀県", "京都府", "大阪府", "兵庫県", "奈良県", "和歌山県", "鳥取県", "島根県", "岡山県", "広島県", "山口県", "徳島県", "香川県", "愛媛県", "高知県", "福岡県", "佐賀県", "長崎県", "熊本県", "大分県", "宮崎県", "鹿児島県", "沖縄県"];
 
+        // 抽出したリンクが店舗公式サイトとして有効かどうかを判定する関数
         function isValidStoreUrl(h) {
             if (!h) return false;
             var trimmed = h.trim();
@@ -23,6 +29,7 @@
             return true;
         }
 
+        // 2. 指定されたURLのリストを1件ずつ順番に巡回してチェック
         for (var i = 0; i < urlsToProcess.length; i++) {
             var targetUrl = urlsToProcess[i];
             var m = [], l = [];
@@ -30,6 +37,7 @@
             var dateStr = "日付取得できず";
             var targetUrls = [];
 
+            // 現在のページならそのままDOMを利用し、別URLならfetchで取得してパース
             if (targetUrl === window.location.href) {
                 doc = document;
             } else {
@@ -44,6 +52,7 @@
                 }
             }
 
+            // 記事本文のコンテナ領域を特定し、テキストとHTMLを抽出
             var mainContent = doc.querySelector('div.entry-content.cf[itemprop="mainEntityOfPage"], .entry-content.cf, .entry-content, .post-content, .article-body, .entry-body') || doc.body;
             var body = doc.body;
             txt = body ? body.innerText : "";
@@ -51,6 +60,7 @@
             var titleEl = doc.querySelector('.entry-title, h1.post-title, h1');
             titleText = titleEl ? titleEl.innerText.trim() : "（タイトル取得できず）";
 
+            // 記事の公開日時メタタグやタイムスタンプ要素から日時を取得
             var metaPub = doc.querySelector('meta[property="article:published_time"], meta[property="og:article:published_time"], meta[name="pubdate"], meta[name="date"], meta[itemprop="datePublished"]');
             var timeEl = doc.querySelector('time.published, time.entry-date, time[datetime], .date, .post-date, .published');
             
@@ -60,9 +70,11 @@
                 dateStr = (timeEl.getAttribute('datetime') || timeEl.innerText).trim().substring(0, 19);
             }
 
+            // タイトルおよびアイキャッチ画像の存在チェック
             if (!titleEl) m.push("記事タイトル");
             if (!doc.querySelector('.post-thumbnail img, .eyecatch img, header img, .wp-post-image, .attachment-post-thumbnail')) m.push("アイキャッチ画像");
 
+            // タイトルの先頭に都道府県名が入っているかチェック
             var hasPrefStart = false;
             for (var j = 0; j < prefs.length; j++) {
                 if (titleText.indexOf(prefs[j]) === 0) {
@@ -72,9 +84,21 @@
                 }
             }
 
-            var hasCategory = txt.indexOf("カテゴリ") !== -1 || doc.querySelector('.entry-categories, .cat-links, [class*="category"]');
+            // 記事に設定されているカテゴリー名を抽出
+            var catEls = doc.querySelectorAll('.entry-categories a, .cat-links a, [class*="category"] a, [rel="category tag"]');
+            var catNames = [];
+            catEls.forEach(function(el) {
+                var cName = el.innerText.trim();
+                if (cName && catNames.indexOf(cName) === -1) {
+                    catNames.push(cName);
+                }
+            });
+            var categoryStr = catNames.length > 0 ? catNames.join(", ") : "";
+
+            var hasCategory = categoryStr !== "" || txt.indexOf("カテゴリ") !== -1 || doc.querySelector('.entry-categories, .cat-links, [class*="category"]');
             if (!hasCategory) m.push("カテゴリ未分類");
             
+            // 必須見出し項目の有無を判定
             r.forEach(function(item) {
                 if (item === "Googleマップ") {
                     if (txt.indexOf("Googleマップ") === -1 && !doc.querySelector('iframe[src*="google.com/maps"]')) m.push("Googleマップなし");
@@ -83,19 +107,24 @@
                 }
             });
 
+            // 画像キャプションの検出チェック
             var hasCaption = doc.querySelectorAll('figcaption, .wp-caption-text').length > 0;
             if (hasCaption) l.push("画像キャプション検出");
             
+            // AI特有のコード残骸混入チェック
             var hasAiCode = /cit_[a-zA-Z0-9_-]{5,}|data-cit|googleapis\.com\/v[0-9]|citation/.test(html);
             if (hasAiCode) l.push("AIコード混入");
 
+            // AI特有の不自然なテンプレート文言チェック
             var hasAiText = txt.indexOf("入力されています") !== -1 || txt.indexOf("入力情報では") !== -1 || txt.indexOf("「-」と入力") !== -1;
             if (hasAiText) l.push("AI不自然文言");
 
+            // 半角カタカナの混入チェック
             var halfWidthKatakanaPattern = /[\uFF61-\uFF9F]/;
             var hasHalfKana = halfWidthKatakanaPattern.test(titleText) || halfWidthKatakanaPattern.test(mainContent.innerText);
             if (hasHalfKana) l.push("半角カタカナ混入");
 
+            // 対応エリア記載と詳細な番地記載の整合性チェック
             var areaKeywords = ["対応エリア", "出張可能エリア", "出張エリア", "対象エリア"];
             var hasAreaMention = areaKeywords.some(function(kw) { return txt.indexOf(kw) !== -1; });
             var banchiPattern = /\d+[\-−ー\d]+|\d+丁目|\d+番地?|\d+号/;
@@ -103,10 +132,12 @@
                 l.push("店舗ありなのに対応エリア記載");
             }
 
+            // Googleマップのiframeから地図URLを抽出
             var gmap = doc.querySelector('iframe[src*="google.com/maps"], iframe[src*="maps.google"]');
             var mapUrl = gmap ? (gmap.getAttribute('src') || "") : "";
             if (mapUrl) targetUrls.push({ name: "Gmap", url: mapUrl });
 
+            // 「店舗情報一覧」および「編集部コメント」付近のリンクURL抽出処理
             var shopInfoUrl = null;
             var editorCommentUrl = null;
             var allEls = Array.from(mainContent.querySelectorAll('*'));
@@ -155,6 +186,7 @@
                 }
             }
 
+            // 万が一見出し周辺から取得できなかった場合のフォールバック抽出
             if (!shopInfoUrl || !editorCommentUrl) {
                 var fallbackAnchors = Array.from(mainContent.querySelectorAll('a[href]')).map(function(a) { return a.getAttribute('href'); }).filter(isValidStoreUrl);
                 fallbackAnchors = Array.from(new Set(fallbackAnchors));
@@ -171,6 +203,7 @@
             if (shopInfoUrl) targetUrls.push({ name: "店舗情報", url: shopInfoUrl });
             if (editorCommentUrl) targetUrls.push({ name: "編集部", url: editorCommentUrl });
 
+            // 1記事分のチェック結果サマリー文字列を構築
             var pageResult = "[タイトル] " + titleText + "\n[日時] " + dateStr + "\n";
             if (m.length === 0 && l.length === 0) {
                 pageResult += "[ステータス] チェックOK\n";
@@ -181,7 +214,7 @@
 
             pageResult += "[判定詳細]:\n";
             pageResult += "  - [タイトル頭出し(都道府県)] " + (hasPrefStart ? "[先頭に地名あり]" : "OK") + "\n";
-            pageResult += "  - [カテゴリー] " + (hasCategory ? "OK" : "[未分類]") + "\n";
+            pageResult += "  - [カテゴリー] " + (categoryStr !== "" ? categoryStr : (hasCategory ? "OK(名称取得できず)" : "[未分類]")) + "\n";
             pageResult += "  - [画像キャプション] " + (hasCaption ? "[キャプション検出]" : "OK") + "\n";
             pageResult += "  - [AIコード/不自然文言] " + (hasAiCode || hasAiText ? "[検出あり]" : "OK") + "\n";
             pageResult += "  - [半角カタカナ] " + (hasHalfKana ? "[検出あり]" : "OK") + "\n";
@@ -196,6 +229,7 @@
             resultsSummary.push(pageResult);
         }
 
+        // 3. 全件のチェック結果をまとめてモーダルUIで画面に表示
         var modalId = "wp-checker-modal-result";
         var oldModal = document.getElementById(modalId);
         if (oldModal) oldModal.remove();
