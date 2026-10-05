@@ -1,10 +1,10 @@
-javascript:(async function(){
+(async function(){
     try {
         var inputUrls = prompt("チェックしたいWordPress記事のURLを貼り付けてください（複数ある場合は改行またはカンマ区切り）：\n※現在開いているページをチェックしたい場合は、何も入力せずOKを押してください。");
         
         var urlsToProcess = [];
         if (inputUrls && inputUrls.trim() !== "") {
-            urlsToProcess = inputUrls.split(/[\n,]/).map(u => u.trim()).filter(u => u.length > 0);
+            urlsToProcess = inputUrls.split(/[\n,]/).map(function(u){ return u.trim(); }).filter(function(u){ return u.length > 0; });
         } else {
             urlsToProcess = [window.location.href];
         }
@@ -16,14 +16,15 @@ javascript:(async function(){
         function isValidStoreUrl(h) {
             if (!h) return false;
             var trimmed = h.trim();
-            if (trimmed.startsWith('#') || trimmed.includes('javascript:')) return false;
-            if (trimmed.includes('google.com/maps') || trimmed.includes('ja.wordpress.org') || trimmed.includes('wordpress.com')) return false;
-            if (trimmed.includes('/wp-admin/') || trimmed.includes('/wp-login.php') || trimmed.includes('about.php')) return false;
-            if (trimmed.includes('btj-romance-lab.com') && (trimmed.includes('/wp-admin') || trimmed.includes('about.php') || trimmed.includes('/local-guide/'))) return false;
+            if (trimmed.indexOf('#') === 0 || trimmed.indexOf('javascript:') !== -1) return false;
+            if (trimmed.indexOf('google.com/maps') !== -1 || trimmed.indexOf('ja.wordpress.org') !== -1 || trimmed.indexOf('wordpress.com') !== -1) return false;
+            if (trimmed.indexOf('/wp-admin/') !== -1 || trimmed.indexOf('/wp-login.php') !== -1 || trimmed.indexOf('about.php') !== -1) return false;
+            if (trimmed.indexOf('btj-romance-lab.com') !== -1 && (trimmed.indexOf('/wp-admin') !== -1 || trimmed.indexOf('about.php') !== -1 || trimmed.indexOf('/local-guide/') !== -1)) return false;
             return true;
         }
 
-        for (let targetUrl of urlsToProcess) {
+        for (var i = 0; i < urlsToProcess.length; i++) {
+            var targetUrl = urlsToProcess[i];
             var m = [], l = [];
             var doc, html = "", txt = "", titleText = "";
             var dateStr = "日付取得できず";
@@ -33,12 +34,12 @@ javascript:(async function(){
                 doc = document;
             } else {
                 try {
-                    let res = await fetch(targetUrl);
-                    let textHtml = await res.text();
-                    let parser = new DOMParser();
+                    var res = await fetch(targetUrl);
+                    var textHtml = await res.text();
+                    var parser = new DOMParser();
                     doc = parser.parseFromString(textHtml, "text/html");
                 } catch (fetchErr) {
-                    resultsSummary.push("❌ 取得失敗\n--------------------");
+                    resultsSummary.push("[取得失敗]\n--------------------");
                     continue;
                 }
             }
@@ -63,22 +64,22 @@ javascript:(async function(){
             if (!doc.querySelector('.post-thumbnail img, .eyecatch img, header img, .wp-post-image, .attachment-post-thumbnail')) m.push("アイキャッチ画像");
 
             var hasPrefStart = false;
-            for (var i = 0; i < prefs.length; i++) {
-                if (titleText.indexOf(prefs[i]) === 0) {
+            for (var j = 0; j < prefs.length; j++) {
+                if (titleText.indexOf(prefs[j]) === 0) {
                     hasPrefStart = true;
-                    l.push("タイトル先頭地名(" + prefs[i] + ")");
+                    l.push("タイトル先頭地名(" + prefs[j] + ")");
                     break;
                 }
             }
 
-            var hasCategory = txt.includes("カテゴリ") || doc.querySelector('.entry-categories, .cat-links, [class*="category"]');
+            var hasCategory = txt.indexOf("カテゴリ") !== -1 || doc.querySelector('.entry-categories, .cat-links, [class*="category"]');
             if (!hasCategory) m.push("カテゴリ未分類");
             
             r.forEach(function(item) {
                 if (item === "Googleマップ") {
-                    if (!txt.includes("Googleマップ") && !doc.querySelector('iframe[src*="google.com/maps"]')) m.push("Googleマップなし");
+                    if (txt.indexOf("Googleマップ") === -1 && !doc.querySelector('iframe[src*="google.com/maps"]')) m.push("Googleマップなし");
                 } else {
-                    if (!txt.includes(item)) m.push(item);
+                    if (txt.indexOf(item) === -1) m.push(item);
                 }
             });
 
@@ -88,7 +89,7 @@ javascript:(async function(){
             var hasAiCode = /cit_[a-zA-Z0-9_-]{5,}|data-cit|googleapis\.com\/v[0-9]|citation/.test(html);
             if (hasAiCode) l.push("AIコード混入");
 
-            var hasAiText = txt.includes("入力されています") || txt.includes("入力情報では") || txt.includes("「-」と入力");
+            var hasAiText = txt.indexOf("入力されています") !== -1 || txt.indexOf("入力情報では") !== -1 || txt.indexOf("「-」と入力") !== -1;
             if (hasAiText) l.push("AI不自然文言");
 
             var halfWidthKatakanaPattern = /[\uFF61-\uFF9F]/;
@@ -96,7 +97,7 @@ javascript:(async function(){
             if (hasHalfKana) l.push("半角カタカナ混入");
 
             var areaKeywords = ["対応エリア", "出張可能エリア", "出張エリア", "対象エリア"];
-            var hasAreaMention = areaKeywords.some(function(kw) { return txt.includes(kw); });
+            var hasAreaMention = areaKeywords.some(function(kw) { return txt.indexOf(kw) !== -1; });
             var banchiPattern = /\d+[\-−ー\d]+|\d+丁目|\d+番地?|\d+号/;
             if (hasAreaMention && banchiPattern.test(txt)) {
                 l.push("店舗ありなのに対応エリア記載");
@@ -110,15 +111,15 @@ javascript:(async function(){
             var editorCommentUrl = null;
             var allEls = Array.from(mainContent.querySelectorAll('*'));
             
-            var shopEl = allEls.find(function(el) { return el.children.length === 0 && el.innerText && el.innerText.trim().includes('店舗情報一覧'); });
+            var shopEl = allEls.find(function(el) { return el.children.length === 0 && el.innerText && el.innerText.trim().indexOf('店舗情報一覧') !== -1; });
             if (shopEl) {
                 var cur = shopEl.closest('h1,h2,h3,h4,div,section,table,tr,p') || shopEl;
-                for (let step = 0; step < 5; step++) {
+                for (var step = 0; step < 5; step++) {
                     if (!cur) break;
                     var aList = Array.from(cur.querySelectorAll('a[href]'));
                     if (cur.tagName === 'A') aList.unshift(cur);
-                    for (var a of aList) {
-                        var h = a.getAttribute('href');
+                    for (var k = 0; k < aList.length; k++) {
+                        var h = aList[k].getAttribute('href');
                         if (isValidStoreUrl(h)) {
                             shopInfoUrl = h.trim();
                             break;
@@ -129,10 +130,10 @@ javascript:(async function(){
                 }
             }
 
-            var editorEl = allEls.find(function(el) { return el.children.length === 0 && el.innerText && el.innerText.trim().includes('編集部コメント'); });
+            var editorEl = allEls.find(function(el) { return el.children.length === 0 && el.innerText && el.innerText.trim().indexOf('編集部コメント') !== -1; });
             if (editorEl) {
                 var blogcards = Array.from(mainContent.querySelectorAll('.blogcard, .external-blogcard, [class*="blogcard"], .wp-block-embed'));
-                var targetCard = blogcards.find(function(card) { return editorEl.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING; });
+                var targetCard = blogcards.find(function(card) { return (editorEl.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0; });
                 if (targetCard) {
                     var aTag = targetCard.querySelector('a[href]');
                     if (aTag && isValidStoreUrl(aTag.getAttribute('href'))) {
@@ -141,9 +142,10 @@ javascript:(async function(){
                 }
                 if (!editorCommentUrl) {
                     var allAnchors = Array.from(mainContent.querySelectorAll('a[href]'));
-                    for (var a of allAnchors) {
-                        if (editorEl.compareDocumentPosition(a) & Node.DOCUMENT_POSITION_FOLLOWING) {
-                            var h2 = a.getAttribute('href');
+                    for (var aIdx = 0; aIdx < allAnchors.length; aIdx++) {
+                        var anchor = allAnchors[aIdx];
+                        if ((editorEl.compareDocumentPosition(anchor) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0) {
+                            var h2 = anchor.getAttribute('href');
                             if (isValidStoreUrl(h2)) {
                                 editorCommentUrl = h2.trim();
                                 break;
@@ -169,26 +171,26 @@ javascript:(async function(){
             if (shopInfoUrl) targetUrls.push({ name: "店舗情報", url: shopInfoUrl });
             if (editorCommentUrl) targetUrls.push({ name: "編集部", url: editorCommentUrl });
 
-            var pageResult = "📌 【" + titleText + "】\n📅 日時: " + dateStr + "\n";
+            var pageResult = "[タイトル] " + titleText + "\n[日時] " + dateStr + "\n";
             if (m.length === 0 && l.length === 0) {
-                pageResult += "✅ ステータス: チェックOK\n";
+                pageResult += "[ステータス] チェックOK\n";
             } else {
-                if (m.length > 0) pageResult += "❌ 不足: " + m.join(", ") + "\n";
-                if (l.length > 0) pageResult += "⚠️ 異常: " + l.join(", ") + "\n";
+                if (m.length > 0) pageResult += "[不足] " + m.join(", ") + "\n";
+                if (l.length > 0) pageResult += "[異常] " + l.join(", ") + "\n";
             }
 
-            pageResult += "🔍 判定詳細:\n";
-            pageResult += "  └ [タイトル頭出し(都道府県)] " + (hasPrefStart ? "⚠️ 先頭に地名あり" : "OK") + "\n";
-            pageResult += "  └ [カテゴリー] " + (hasCategory ? "OK" : "❌ 未分類") + "\n";
-            pageResult += "  └ [画像キャプション] " + (hasCaption ? "⚠️ キャプション検出" : "OK") + "\n";
-            pageResult += "  └ [AIコード/不自然文言] " + (hasAiCode || hasAiText ? "⚠️ 検出あり" : "OK") + "\n";
-            pageResult += "  └ [半角カタカナ] " + (hasHalfKana ? "⚠️️ 検出あり" : "OK") + "\n";
+            pageResult += "[判定詳細]:\n";
+            pageResult += "  - [タイトル頭出し(都道府県)] " + (hasPrefStart ? "[先頭に地名あり]" : "OK") + "\n";
+            pageResult += "  - [カテゴリー] " + (hasCategory ? "OK" : "[未分類]") + "\n";
+            pageResult += "  - [画像キャプション] " + (hasCaption ? "[キャプション検出]" : "OK") + "\n";
+            pageResult += "  - [AIコード/不自然文言] " + (hasAiCode || hasAiText ? "[検出あり]" : "OK") + "\n";
+            pageResult += "  - [半角カタカナ] " + (hasHalfKana ? "[検出あり]" : "OK") + "\n";
 
             if (targetUrls.length > 0) {
-                var linkStrs = targetUrls.map(function(u) { return "  └ [" + u.name + "] " + decodeURIComponent(u.url); }).join("\n");
-                pageResult += "🔗 抽出リンク:\n" + linkStrs + "\n";
+                var linkStrs = targetUrls.map(function(u) { return "  - [" + u.name + "] " + decodeURIComponent(u.url); }).join("\n");
+                pageResult += "[抽出リンク]:\n" + linkStrs + "\n";
             } else {
-                pageResult += "🔗 抽出リンク: なし\n";
+                pageResult += "[抽出リンク]: なし\n";
             }
 
             resultsSummary.push(pageResult);
