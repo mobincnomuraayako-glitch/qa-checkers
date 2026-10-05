@@ -38,7 +38,7 @@
                     let parser = new DOMParser();
                     doc = parser.parseFromString(textHtml, "text/html");
                 } catch (fetchErr) {
-                    resultsSummary.push(`❌ 取得失敗\n--------------------`);
+                    resultsSummary.push(`❌ 取得失敗 (${targetUrl})\n--------------------`);
                     continue;
                 }
             }
@@ -48,7 +48,7 @@
             txt = body ? body.innerText : "";
             html = body ? body.innerHTML : "";
             var titleEl = doc.querySelector('.entry-title, h1.post-title, h1');
-            titleText = titleEl ? titleEl.innerText.trim() : "タイトルなし";
+            titleText = titleEl ? titleEl.innerText.trim() : "（タイトル取得できず）";
 
             var metaPub = doc.querySelector('meta[property="article:published_time"], meta[property="og:article:published_time"], meta[name="pubdate"], meta[name="date"], meta[itemprop="datePublished"]');
             var timeEl = doc.querySelector('time.published, time.entry-date, time[datetime], .date, .post-date, .published');
@@ -126,7 +126,7 @@
 
             var editorEl = allEls.find(function(el) { return el.children.length === 0 && el.innerText && el.innerText.trim().includes('編集部コメント'); });
             if (editorEl) {
-                var blogcards = Array.from(mainContent.querySelectorAll('.blogcard, .external-blogcard, [class*="blogcard'], .wp-block-embed'));
+                var blogcards = Array.from(mainContent.querySelectorAll('.blogcard, .external-blogcard, [class*="blogcard"], .wp-block-embed'));
                 var targetCard = blogcards.find(function(card) { return editorEl.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING; });
                 if (targetCard) {
                     var aTag = targetCard.querySelector('a[href]');
@@ -164,10 +164,10 @@
             if (shopInfoUrl) targetUrls.push({ name: "店舗情報", url: shopInfoUrl });
             if (editorCommentUrl) targetUrls.push({ name: "編集部", url: editorCommentUrl });
 
-            // 記事タイトルと日付、ステータス、リンクのみで構成（WPのURLは排除）
-            var pageResult = `【${titleText}】\n📅 ${dateStr}\n`;
+            // 完全にURLを省き、タイトルと日時・ステータス・リンクのみを綺麗に並べる
+            var pageResult = `📌 【${titleText}】\n📅 日時: ${dateStr}\n`;
             if (m.length === 0 && l.length === 0) {
-                pageResult += "✅ チェックOK\n";
+                pageResult += "✅ ステータス: チェックOK\n";
             } else {
                 if (m.length > 0) pageResult += "❌ 不足: " + m.join(", ") + "\n";
                 if (l.length > 0) pageResult += "⚠️ 異常: " + l.join(", ") + "\n";
@@ -175,15 +175,14 @@
 
             if (targetUrls.length > 0) {
                 var linkStrs = targetUrls.map(u => `  └ [${u.name}] ${decodeURIComponent(u.url)}`).join("\n");
-                pageResult += `🔗 Links:\n${linkStrs}\n`;
+                pageResult += `🔗 抽出リンク:\n${linkStrs}\n`;
             } else {
-                pageResult += "🔗 Links: なし\n";
+                pageResult += "🔗 抽出リンク: なし\n";
             }
 
             resultsSummary.push(pageResult);
         }
 
-        // カスタムモーダルウィンドウを生成（スクロール可能）
         var modalId = "wp-checker-modal-result";
         var oldModal = document.getElementById(modalId);
         if (oldModal) oldModal.remove();
