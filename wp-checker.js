@@ -13,7 +13,6 @@
         var r = ["基本情報", "店舗概要", "所在地・アクセス", "営業時間・定休日", "サービス", "設備", "店舗情報一覧", "まとめ", "FAQ", "編集部コメント", "Googleマップ"];
         var prefs = ["北海道", "青森県", "岩手県", "宮城県", "秋田県", "山形県", "福島県", "茨城県", "栃木県", "群馬県", "埼玉県", "千葉県", "東京都", "神奈川県", "新潟県", "富山県", "石川県", "福井県", "山梨県", "長野県", "岐阜県", "静岡県", "愛知県", "三重県", "滋賀県", "京都府", "大阪府", "兵庫県", "奈良県", "和歌山県", "鳥取県", "島根県", "岡山県", "広島県", "山口県", "徳島県", "香川県", "愛媛県", "高知県", "福岡県", "佐賀県", "長崎県", "熊本県", "大分県", "宮崎県", "鹿児島県", "沖縄県"];
 
-        // 外部URLの店舗リンク検証用関数
         function isValidStoreUrl(h) {
             if (!h) return false;
             var trimmed = h.trim();
@@ -39,7 +38,7 @@
                     let parser = new DOMParser();
                     doc = parser.parseFromString(textHtml, "text/html");
                 } catch (fetchErr) {
-                    resultsSummary.push(`📄 URL: ${targetUrl}\n❌ 取得失敗: ${fetchErr.message}\n--------------------`);
+                    resultsSummary.push(`❌ 取得失敗\n--------------------`);
                     continue;
                 }
             }
@@ -49,9 +48,8 @@
             txt = body ? body.innerText : "";
             html = body ? body.innerHTML : "";
             var titleEl = doc.querySelector('.entry-title, h1.post-title, h1');
-            titleText = titleEl ? titleEl.innerText.trim() : "";
+            titleText = titleEl ? titleEl.innerText.trim() : "タイトルなし";
 
-            // --- 日時の網羅的取得（公開日・予約投稿日時） ---
             var metaPub = doc.querySelector('meta[property="article:published_time"], meta[property="og:article:published_time"], meta[name="pubdate"], meta[name="date"], meta[itemprop="datePublished"]');
             var timeEl = doc.querySelector('time.published, time.entry-date, time[datetime], .date, .post-date, .published');
             
@@ -61,13 +59,12 @@
                 dateStr = (timeEl.getAttribute('datetime') || timeEl.innerText).trim().substring(0, 19);
             }
 
-            // --- 各種チェック項目 ---
-            if (!titleText) m.push("記事タイトル");
+            if (!titleEl) m.push("記事タイトル");
             if (!doc.querySelector('.post-thumbnail img, .eyecatch img, header img, .wp-post-image, .attachment-post-thumbnail')) m.push("アイキャッチ画像");
 
             for (var i = 0; i < prefs.length; i++) {
                 if (titleText.indexOf(prefs[i]) === 0) {
-                    l.push("タイトル異常: 先頭が地名(" + prefs[i] + ")");
+                    l.push("タイトル先頭地名(" + prefs[i] + ")");
                     break;
                 }
             }
@@ -83,12 +80,12 @@
             });
 
             if (doc.querySelectorAll('figcaption, .wp-caption-text').length > 0) l.push("画像キャプション検出");
-            if (/cit_[a-zA-Z0-9_-]{5,}|data-cit|googleapis\.com\/v[0-9]|citation/.test(html)) l.push("AIコンテキストコード混入");
-            if (txt.includes("入力されています") || txt.includes("入力情報では") || txt.includes("「-」と入力")) l.push("AI特有の不自然な文言");
+            if (/cit_[a-zA-Z0-9_-]{5,}|data-cit|googleapis\.com\/v[0-9]|citation/.test(html)) l.push("AIコード混入");
+            if (txt.includes("入力されています") || txt.includes("入力情報では") || txt.includes("「-」と入力")) l.push("AI不自然文言");
 
             var halfWidthKatakanaPattern = /[\uFF61-\uFF9F]/;
             if (halfWidthKatakanaPattern.test(titleText) || halfWidthKatakanaPattern.test(mainContent.innerText)) {
-                l.push("半角カタカナの混入検知 (文字消失リスクあり)");
+                l.push("半角カタカナ混入");
             }
 
             var areaKeywords = ["対応エリア", "出張可能エリア", "出張エリア", "対象エリア"];
@@ -96,14 +93,13 @@
             if (hasAreaMention) {
                 var banchiPattern = /\d+[\-−ー\d]+|\d+丁目|\d+番地?|\d+号/;
                 if (banchiPattern.test(txt)) {
-                    l.push("店舗あり(番地記載あり)のため対応エリア等の記載不可");
+                    l.push("店舗ありなのに対応エリア記載");
                 }
             }
 
-            // --- 【復活】確認対象URL（Googleマップ・店舗情報・編集部コメント）の抽出 ---
             var gmap = doc.querySelector('iframe[src*="google.com/maps"], iframe[src*="maps.google"]');
             var mapUrl = gmap ? (gmap.getAttribute('src') || "") : "";
-            if (mapUrl) targetUrls.push({ name: "Googleマップ", url: mapUrl });
+            if (mapUrl) targetUrls.push({ name: "Gmap", url: mapUrl });
 
             var shopInfoUrl = null;
             var editorCommentUrl = null;
@@ -130,7 +126,7 @@
 
             var editorEl = allEls.find(function(el) { return el.children.length === 0 && el.innerText && el.innerText.trim().includes('編集部コメント'); });
             if (editorEl) {
-                var blogcards = Array.from(mainContent.querySelectorAll('.blogcard, .external-blogcard, [class*="blogcard"], .wp-block-embed'));
+                var blogcards = Array.from(mainContent.querySelectorAll('.blogcard, .external-blogcard, [class*="blogcard'], .wp-block-embed'));
                 var targetCard = blogcards.find(function(card) { return editorEl.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING; });
                 if (targetCard) {
                     var aTag = targetCard.querySelector('a[href]');
@@ -165,31 +161,60 @@
                 }
             }
 
-            if (shopInfoUrl) targetUrls.push({ name: "店舗情報一覧", url: shopInfoUrl });
-            if (editorCommentUrl) targetUrls.push({ name: "編集部コメント", url: editorCommentUrl });
+            if (shopInfoUrl) targetUrls.push({ name: "店舗情報", url: shopInfoUrl });
+            if (editorCommentUrl) targetUrls.push({ name: "編集部", url: editorCommentUrl });
 
-            // --- 結果の組み立て ---
-            var pageResult = `📄 URL: ${targetUrl}\n📅 日時: ${dateStr}\n`;
+            // 記事タイトルと日付、ステータス、リンクのみで構成（WPのURLは排除）
+            var pageResult = `【${titleText}】\n📅 ${dateStr}\n`;
             if (m.length === 0 && l.length === 0) {
-                pageResult += "✅ ステータス: チェックOK！\n";
+                pageResult += "✅ チェックOK\n";
             } else {
-                if (m.length > 0) pageResult += "❌ 不足:\n・" + m.join("\n・") + "\n";
-                if (l.length > 0) pageResult += "⚠️ 異常:\n・" + l.join("\n・") + "\n";
+                if (m.length > 0) pageResult += "❌ 不足: " + m.join(", ") + "\n";
+                if (l.length > 0) pageResult += "⚠️ 異常: " + l.join(", ") + "\n";
             }
 
             if (targetUrls.length > 0) {
-                pageResult += "🔗 抽出URL (" + targetUrls.length + "件):\n";
-                targetUrls.forEach(function(u) {
-                    pageResult += "   ・[" + u.name + "] " + u.url + "\n";
-                });
+                var linkStrs = targetUrls.map(u => `  └ [${u.name}] ${decodeURIComponent(u.url)}`).join("\n");
+                pageResult += `🔗 Links:\n${linkStrs}\n`;
             } else {
-                pageResult += "🔗 抽出URL: なし\n";
+                pageResult += "🔗 Links: なし\n";
             }
 
-            resultsSummary.push(pageResult + "--------------------");
+            resultsSummary.push(pageResult);
         }
 
-        alert("【一括WPチェック結果（全 " + urlsToProcess.length + " 件）】\n\n" + resultsSummary.join("\n"));
+        // カスタムモーダルウィンドウを生成（スクロール可能）
+        var modalId = "wp-checker-modal-result";
+        var oldModal = document.getElementById(modalId);
+        if (oldModal) oldModal.remove();
+
+        var overlay = document.createElement('div');
+        overlay.id = modalId;
+        overlay.style.cssText = "position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:999999;display:flex;align-items:center;justify-content:center;font-family:sans-serif;";
+        
+        var box = document.createElement('div');
+        box.style.cssText = "background:#fff;width:85%;max-width:750px;max-height:85vh;border-radius:8px;padding:20px;box-shadow:0 4px 20px rgba(0,0,0,0.3);display:flex;flex-direction:column;";
+        
+        var header = document.createElement('div');
+        header.innerHTML = `<h3 style="margin:0 0 10px;font-size:16px;color:#333;">一括WPチェック結果（全 ${urlsToProcess.length} 件）</h3>`;
+        
+        var contentArea = document.createElement('div');
+        contentArea.style.cssText = "flex:1;overflow-y:auto;white-space:pre-wrap;font-size:13px;line-height:1.6;color:#333;background:#f9f9f9;padding:12px;border:1px solid #ddd;border-radius:4px;";
+        contentArea.innerText = resultsSummary.join("\n--------------------\n\n");
+        
+        var footer = document.createElement('div');
+        footer.style.cssText = "margin-top:15px;text-align:right;";
+        var closeBtn = document.createElement('button');
+        closeBtn.innerText = "閉じる";
+        closeBtn.style.cssText = "padding:8px 22px;background:#0073aa;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:14px;font-weight:bold;";
+        closeBtn.onclick = function() { overlay.remove(); };
+        
+        footer.appendChild(closeBtn);
+        box.appendChild(header);
+        box.appendChild(contentArea);
+        box.appendChild(footer);
+        overlay.appendChild(box);
+        document.body.appendChild(overlay);
 
     } catch (e) {
         alert("エラー: " + e.message);
