@@ -26,7 +26,7 @@
                 desc.innerText = "チェックしたいURLを改行またはカンマ区切りで貼り付けてください。\n※空欄のまま実行すると、現在開いているページをチェックします。\n※4件以上は不安定です";
                 desc.style.cssText = "margin:0 0 10px;font-size:12px;color:#d9534f;line-height:1.4;font-weight:bold;";
 
-                // URL入力を受け付けるテキストエリア（縦方向のリサイズ可能）
+                // URL入力を受け付けるテキストエリア
                 var textarea = document.createElement('textarea');
                 textarea.style.cssText = "width:100%;height:150px;padding:8px;font-size:13px;border:1px solid #ddd;border-radius:4px;box-sizing:border-box;resize:vertical;";
                 textarea.placeholder = "https://example.com/post-1\nhttps://example.com/post-2";
@@ -101,7 +101,7 @@
             var targetUrls = [];
 
             if (targetUrl === window.location.href) {
-                doc = document;
+                doc = document.cloneNode(true);
             } else {
                 try {
                     var res = await fetch(targetUrl);
@@ -113,6 +113,17 @@
                     continue;
                 }
             }
+
+            // ★「管理ヘッダー」「右側ウィジェット」「ランキング・RSS・関連記事・フッター」を完全削除
+            var noiseSelectors = [
+                '#wpadminbar', '#adminmenu', '#adminmenuback', '.header-container', 'header',
+                '#sidebar', '.sidebar', 'aside', '.widget', '#secondary',
+                '.ranking-item', '.ranking-box', '.popular-posts', '.wpp-list', '.widget_related',
+                '.related-posts', '.sns-share', '.author-box', 'footer', '.footer', '#footer'
+            ];
+            noiseSelectors.forEach(function(sel) {
+                doc.querySelectorAll(sel).forEach(function(el) { el.remove(); });
+            });
 
             // 記事の本文エリアを特定
             var mainContent = doc.querySelector('div.entry-content.cf[itemprop="mainEntityOfPage"], .entry-content.cf, .entry-content, .post-content, .article-body, .entry-body') || doc.body;
@@ -132,7 +143,7 @@
             }
 
             if (!titleEl) m.push("記事タイトル");
-            if (!doc.querySelector('.post-thumbnail img, .eyecatch img, header img, .wp-post-image, .attachment-post-thumbnail')) m.push("アイキャッチ画像");
+            if (!doc.querySelector('.post-thumbnail img, .eyecatch img, .wp-post-image, .attachment-post-thumbnail')) m.push("アイキャッチ画像");
 
             var hasPrefStart = false;
             for (var j = 0; j < prefs.length; j++) {
@@ -143,30 +154,12 @@
                 }
             }
 
-            // ★修正：ページ全体（doc）ではなく、記事ヘッダーや本文周辺、あるいは「.cat-label」に限定しつつサイドバー等を除外する
-            // 記事の上下（entry-header, entry-footer等）に含まれるカテゴリ要素だけに絞り込みます
-            var categoryContainers = doc.querySelectorAll('.entry-header, .entry-footer, .post-meta, .article-header, .article-footer');
-            var catEls = [];
-            if (categoryContainers.length > 0) {
-                // 記事の上下エリアが見つかった場合、その中にあるカテゴリラベルやタグだけを対象にする
-                categoryContainers.forEach(function(container) {
-                    var found = container.querySelectorAll('.cat-label, [class*="cat-label"], a[rel="category tag"], a[href*="/category/"]');
-                    found.forEach(function(el) { catEls.push(el); });
-                });
-            } else {
-                // 見つからない場合は本文エリア内から探す
-                catEls = mainContent.querySelectorAll('.cat-label, [class*="cat-label"], a[rel="category tag"], a[href*="/category/"]');
-            }
-
+            // カテゴリの抽出（ノイズ除去済みのドキュメントから安全に取得）
+            var catEls = doc.querySelectorAll('.cat-label, [class*="cat-label"], a[rel="category tag"], a[href*="/category/"]');
             var catNames = [];
             catEls.forEach(function(el) {
                 var cName = el.innerText.trim();
-                // 管理画面特有の文字や件数表示が混入しないよう弾く
-                if (cName && 
-                    cName.indexOf("件の更新") === -1 && 
-                    cName.indexOf("コメントが承認") === -1 && 
-                    cName.indexOf("さん") === -1 && 
-                    catNames.indexOf(cName) === -1) {
+                if (cName && catNames.indexOf(cName) === -1) {
                     catNames.push(cName);
                 }
             });
