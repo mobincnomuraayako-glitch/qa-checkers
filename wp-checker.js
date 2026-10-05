@@ -1,4 +1,4 @@
-(async function(){
+javascript:(async function(){
     try {
         var inputUrls = prompt("チェックしたいWordPress記事のURLを貼り付けてください（複数ある場合は改行またはカンマ区切り）：\n※現在開いているページをチェックしたい場合は、何も入力せずOKを押してください。");
         
@@ -38,7 +38,7 @@
                     let parser = new DOMParser();
                     doc = parser.parseFromString(textHtml, "text/html");
                 } catch (fetchErr) {
-                    resultsSummary.push(`❌ 取得失敗 (${targetUrl})\n--------------------`);
+                    resultsSummary.push(`❌ 取得失敗\n--------------------`);
                     continue;
                 }
             }
@@ -164,7 +164,6 @@
             if (shopInfoUrl) targetUrls.push({ name: "店舗情報", url: shopInfoUrl });
             if (editorCommentUrl) targetUrls.push({ name: "編集部", url: editorCommentUrl });
 
-            // 完全にURLを省き、タイトルと日時・ステータス・リンクのみを綺麗に並べる
             var pageResult = `📌 【${titleText}】\n📅 日時: ${dateStr}\n`;
             if (m.length === 0 && l.length === 0) {
                 pageResult += "✅ ステータス: チェックOK\n";
