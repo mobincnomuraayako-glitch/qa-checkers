@@ -1,36 +1,41 @@
 (async function(){
     try {
-        // promptの代わりに、サイズ変更可能なテキストエリアを持つカスタム入力モーダルを呼び出す関数
+        // 【関数】プロンプトの代わりに、大きなテキストエリアを持つカスタム入力モーダルを生成する
         function showInputModal() {
             return new Promise(function(resolve) {
                 var modalId = "wp-checker-input-modal";
                 var old = document.getElementById(modalId);
                 if (old) old.remove();
 
+                // 背景のオーバーレイ
                 var overlay = document.createElement('div');
                 overlay.id = modalId;
                 overlay.style.cssText = "position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:999999;display:flex;align-items:center;justify-content:center;font-family:sans-serif;";
                 
+                // モーダル本体のボックス
                 var box = document.createElement('div');
                 box.style.cssText = "background:#fff;width:85%;max-width:600px;border-radius:8px;padding:20px;box-shadow:0 4px 20px rgba(0,0,0,0.3);display:flex;flex-direction:column;";
                 
+                // タイトル
                 var header = document.createElement('h3');
                 header.innerText = "WordPress記事URL一括チェック";
                 header.style.cssText = "margin:0 0 10px;font-size:16px;color:#333;";
                 
+                // 注意事項の説明文
                 var desc = document.createElement('p');
-                // ★「4件以上は不安定です」のメッセージを追加
                 desc.innerText = "チェックしたいURLを改行またはカンマ区切りで貼り付けてください。\n※空欄のまま実行すると、現在開いているページをチェックします。\n※4件以上は不安定です";
                 desc.style.cssText = "margin:0 0 10px;font-size:12px;color:#d9534f;line-height:1.4;font-weight:bold;";
 
-                // 自由なサイズに変更できるテキストエリア（resize:vertical;で縦方向にリサイズ可能）
+                // URL入力を受け付けるテキストエリア（縦方向のリサイズ可能）
                 var textarea = document.createElement('textarea');
                 textarea.style.cssText = "width:100%;height:150px;padding:8px;font-size:13px;border:1px solid #ddd;border-radius:4px;box-sizing:border-box;resize:vertical;";
                 textarea.placeholder = "https://example.com/post-1\nhttps://example.com/post-2";
                 
+                // ボタン配置用のエリア
                 var btnArea = document.createElement('div');
                 btnArea.style.cssText = "margin-top:12px;text-align:right;";
                 
+                // キャンセルボタン
                 var cancelBtn = document.createElement('button');
                 cancelBtn.innerText = "キャンセル";
                 cancelBtn.style.cssText = "padding:6px 14px;background:#ccc;color:#333;border:none;border-radius:4px;cursor:pointer;margin-right:8px;font-size:13px;";
@@ -39,15 +44,17 @@
                     resolve(null); // キャンセル時はnullを返す
                 };
 
+                // チェック実行ボタン
                 var okBtn = document.createElement('button');
                 okBtn.innerText = "チェック実行";
                 okBtn.style.cssText = "padding:6px 18px;background:#0073aa;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:13px;font-weight:bold;";
                 okBtn.onclick = function() {
                     var val = textarea.value;
                     overlay.remove();
-                    resolve(val);
+                    resolve(val); // テキストエリアの値を返す
                 };
 
+                // 要素の組み立て
                 btnArea.appendChild(cancelBtn);
                 btnArea.appendChild(okBtn);
                 box.appendChild(header);
@@ -60,21 +67,24 @@
             });
         }
 
-        // 1. カスタム入力モーダルを表示してURLを受け取る
+        // 1. 入力モーダルを呼び出してURLリストを取得する
         var inputUrls = await showInputModal();
-        if (inputUrls === null) return; // キャンセルされた場合は中断
+        if (inputUrls === null) return; // キャンセルされたら中断
         
         var urlsToProcess = [];
         if (inputUrls && inputUrls.trim() !== "") {
+            // 改行またはカンマ区切りでURLを分割して配列化
             urlsToProcess = inputUrls.split(/[\n,]/).map(function(u){ return u.trim(); }).filter(function(u){ return u.length > 0; });
         } else {
             urlsToProcess = [window.location.href];
         }
 
         var resultsSummary = [];
+        // チェック対象とする見出し項目や都道府県リストの定義
         var r = ["基本情報", "店舗概要", "所在地・アクセス", "営業時間・定休日", "サービス", "設備", "店舗情報一覧", "まとめ", "FAQ", "編集部コメント", "Googleマップ"];
         var prefs = ["北海道", "青森県", "岩手県", "宮城県", "秋田県", "山形県", "福島県", "茨城県", "栃木県", "群馬県", "埼玉県", "千葉県", "東京都", "神奈川県", "新潟県", "富山県", "石川県", "福井県", "山梨県", "長野県", "岐阜県", "静岡県", "愛知県", "三重県", "滋賀県", "京都府", "大阪府", "兵庫県", "奈良県", "和歌山県", "鳥取県", "島根県", "岡山県", "広島県", "山口県", "徳島県", "香川県", "愛媛県", "高知県", "福岡県", "佐賀県", "長崎県", "熊本県", "大分県", "宮崎県", "鹿児島県", "沖縄県"];
 
+        // リンク先が店舗URLとして適切か判定する関数
         function isValidStoreUrl(h) {
             if (!h) return false;
             var trimmed = h.trim();
@@ -85,7 +95,7 @@
             return true;
         }
 
-        // 2. 指定されたURLのリストを1件ずつ順番に巡回してチェック
+        // 2. 指定されたURLを1件ずつ順番にフェッチしてチェック処理を実行
         for (var i = 0; i < urlsToProcess.length; i++) {
             var targetUrl = urlsToProcess[i];
             var m = [], l = [];
@@ -93,6 +103,7 @@
             var dateStr = "日付取得できず";
             var targetUrls = [];
 
+            // 現在開いているページと同じならそのままdocumentを使用、それ以外はfetchで取得してパース
             if (targetUrl === window.location.href) {
                 doc = document;
             } else {
@@ -107,6 +118,7 @@
                 }
             }
 
+            // 本文やタイトルの取得
             var mainContent = doc.querySelector('div.entry-content.cf[itemprop="mainEntityOfPage"], .entry-content.cf, .entry-content, .post-content, .article-body, .entry-body') || doc.body;
             var body = doc.body;
             txt = body ? body.innerText : "";
@@ -114,6 +126,7 @@
             var titleEl = doc.querySelector('.entry-title, h1.post-title, h1');
             titleText = titleEl ? titleEl.innerText.trim() : "（タイトル取得できず）";
 
+            // 公開日時の取得
             var metaPub = doc.querySelector('meta[property="article:published_time"], meta[property="og:article:published_time"], meta[name="pubdate"], meta[name="date"], meta[itemprop="datePublished"]');
             var timeEl = doc.querySelector('time.published, time.entry-date, time[datetime], .date, .post-date, .published');
             
@@ -123,9 +136,11 @@
                 dateStr = (timeEl.getAttribute('datetime') || timeEl.innerText).trim().substring(0, 19);
             }
 
+            // 必須項目のチェック（タイトル・アイキャッチ画像）
             if (!titleEl) m.push("記事タイトル");
             if (!doc.querySelector('.post-thumbnail img, .eyecatch img, header img, .wp-post-image, .attachment-post-thumbnail')) m.push("アイキャッチ画像");
 
+            // タイトル先頭の都道府県チェック
             var hasPrefStart = false;
             for (var j = 0; j < prefs.length; j++) {
                 if (titleText.indexOf(prefs[j]) === 0) {
@@ -135,8 +150,8 @@
                 }
             }
 
-            // カテゴリー名の抽出処理
-            var catEls = doc.querySelectorAll('.entry-categories a, .cat-links a, [class*="category"] a, [rel="category tag"]');
+            // ★カテゴリ名の抽出（管理画面のメニュー等を巻き込まないよう .cat-label クラス等を優先指定）
+            var catEls = doc.querySelectorAll('.cat-label, [class*="cat-label"] a, .entry-categories a, .cat-links a, [rel="category tag"]');
             var catNames = [];
             catEls.forEach(function(el) {
                 var cName = el.innerText.trim();
@@ -146,9 +161,10 @@
             });
             var categoryStr = catNames.length > 0 ? catNames.join(", ") : "";
 
-            var hasCategory = categoryStr !== "" || txt.indexOf("カテゴリ") !== -1 || doc.querySelector('.entry-categories, .cat-links, [class*="category"]');
+            var hasCategory = categoryStr !== "" || doc.querySelector('.cat-label, [class*="cat-label"], .entry-categories, .cat-links');
             if (!hasCategory) m.push("カテゴリ未分類");
             
+            // 各種見出しの有無をチェック
             r.forEach(function(item) {
                 if (item === "Googleマップ") {
                     if (txt.indexOf("Googleマップ") === -1 && !doc.querySelector('iframe[src*="google.com/maps"]')) m.push("Googleマップなし");
@@ -157,6 +173,7 @@
                 }
             });
 
+            // キャプションやAIコード、半角カタカナ等の異常値チェック
             var hasCaption = doc.querySelectorAll('figcaption, .wp-caption-text').length > 0;
             if (hasCaption) l.push("画像キャプション検出");
             
@@ -170,6 +187,7 @@
             var hasHalfKana = halfWidthKatakanaPattern.test(titleText) || halfWidthKatakanaPattern.test(mainContent.innerText);
             if (hasHalfKana) l.push("半角カタカナ混入");
 
+            // 店舗ありなのに対応エリア記載があるかチェック
             var areaKeywords = ["対応エリア", "出張可能エリア", "出張エリア", "対象エリア"];
             var hasAreaMention = areaKeywords.some(function(kw) { return txt.indexOf(kw) !== -1; });
             var banchiPattern = /\d+[\-−ー\d]+|\d+丁目|\d+番地?|\d+号/;
@@ -177,6 +195,7 @@
                 l.push("店舗ありなのに対応エリア記載");
             }
 
+            // 関連リンク（Googleマップ・店舗情報・編集部コメントなど）の抽出
             var gmap = doc.querySelector('iframe[src*="google.com/maps"], iframe[src*="maps.google"]');
             var mapUrl = gmap ? (gmap.getAttribute('src') || "") : "";
             if (mapUrl) targetUrls.push({ name: "Gmap", url: mapUrl });
@@ -206,7 +225,7 @@
 
             var editorEl = allEls.find(function(el) { return el.children.length === 0 && el.innerText && el.innerText.trim().indexOf('編集部コメント') !== -1; });
             if (editorEl) {
-                var blogcards = Array.from(mainContent.querySelectorAll('.blogcard, .external-blogcard, [class*="blogcard"], .wp-block-embed'));
+                var blogcards = Array.from(mainContent.querySelectorAll('.blogcard, .external-blogcard, [class*="blogcard'], .wp-block-embed'));
                 var targetCard = blogcards.find(function(card) { return (editorEl.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0; });
                 if (targetCard) {
                     var aTag = targetCard.querySelector('a[href]');
@@ -245,6 +264,7 @@
             if (shopInfoUrl) targetUrls.push({ name: "店舗情報", url: shopInfoUrl });
             if (editorCommentUrl) targetUrls.push({ name: "編集部", url: editorCommentUrl });
 
+            // 判定結果のテキスト組み立て
             var pageResult = "[タイトル] " + titleText + "\n[日時] " + dateStr + "\n";
             if (m.length === 0 && l.length === 0) {
                 pageResult += "[ステータス] チェックOK\n";
@@ -255,7 +275,7 @@
 
             pageResult += "[判定詳細]:\n";
             pageResult += "  - [タイトル頭出し(都道府県)] " + (hasPrefStart ? "[先頭に地名あり]" : "OK") + "\n";
-            pageResult += "  - [カテゴリー] " + (categoryStr !== "" ? categoryStr : (hasCategory ? "OK(名称取得できず)" : "[未分類]")) + "\n";
+            pageResult += "  - [カテゴリー] " + (categoryStr !== "" ? categoryStr : "[未分類]") + "\n";
             pageResult += "  - [画像キャプション] " + (hasCaption ? "[キャプション検出]" : "OK") + "\n";
             pageResult += "  - [AIコード/不自然文言] " + (hasAiCode || hasAiText ? "[検出あり]" : "OK") + "\n";
             pageResult += "  - [半角カタカナ] " + (hasHalfKana ? "[検出あり]" : "OK") + "\n";
@@ -270,7 +290,7 @@
             resultsSummary.push(pageResult);
         }
 
-        // 3. 全件のチェック結果をまとめてモーダルUIで表示
+        // 3. 全件のチェック結果をまとめてモーダル表示する
         var modalId = "wp-checker-modal-result";
         var oldModal = document.getElementById(modalId);
         if (oldModal) oldModal.remove();
