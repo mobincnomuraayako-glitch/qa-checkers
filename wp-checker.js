@@ -38,7 +38,7 @@ javascript:(async function(){
                     let parser = new DOMParser();
                     doc = parser.parseFromString(textHtml, "text/html");
                 } catch (fetchErr) {
-                    resultsSummary.push(`❌ 取得失敗\n--------------------`);
+                    resultsSummary.push("❌ 取得失敗\n--------------------");
                     continue;
                 }
             }
@@ -71,7 +71,8 @@ javascript:(async function(){
                 }
             }
 
-            if (!txt.includes("カテゴリ") && !doc.querySelector('.entry-categories, .cat-links, [class*="category"]')) m.push("カテゴリ未分類");
+            var hasCategory = txt.includes("カテゴリ") || doc.querySelector('.entry-categories, .cat-links, [class*="category"]');
+            if (!hasCategory) m.push("カテゴリ未分類");
             
             r.forEach(function(item) {
                 if (item === "Googleマップ") {
@@ -130,7 +131,7 @@ javascript:(async function(){
 
             var editorEl = allEls.find(function(el) { return el.children.length === 0 && el.innerText && el.innerText.trim().includes('編集部コメント'); });
             if (editorEl) {
-                var blogcards = Array.from(mainContent.querySelectorAll('.blogcard, .external-blogcard, [class*="blogcard'], .wp-block-embed'));
+                var blogcards = Array.from(mainContent.querySelectorAll('.blogcard, .external-blogcard, [class*="blogcard"], .wp-block-embed'));
                 var targetCard = blogcards.find(function(card) { return editorEl.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING; });
                 if (targetCard) {
                     var aTag = targetCard.querySelector('a[href]');
@@ -168,8 +169,7 @@ javascript:(async function(){
             if (shopInfoUrl) targetUrls.push({ name: "店舗情報", url: shopInfoUrl });
             if (editorCommentUrl) targetUrls.push({ name: "編集部", url: editorCommentUrl });
 
-            // 結果の構築
-            var pageResult = `📌 【${titleText}】\n📅 日時: ${dateStr}\n`;
+            var pageResult = "📌 【" + titleText + "】\n📅 日時: " + dateStr + "\n";
             if (m.length === 0 && l.length === 0) {
                 pageResult += "✅ ステータス: チェックOK\n";
             } else {
@@ -177,17 +177,16 @@ javascript:(async function(){
                 if (l.length > 0) pageResult += "⚠️ 異常: " + l.join(", ") + "\n";
             }
 
-            // 各詳細項目のOK状況を明記
             pageResult += "🔍 判定詳細:\n";
-            pageResult += `  └ [タイトル頭出し(都道府県)] ${hasPrefStart ? "⚠️ 先頭に地名あり" : "OK"}\n`;
-            pageResult += `  └ [カテゴリー] ${!txt.includes("カテゴリ") && !doc.querySelector('.entry-categories, .cat-links, [class*="category"]') ? "❌ 未分類" : "OK"}\n`;
-            pageResult += `  └ [画像キャプション] ${hasCaption ? "⚠️ キャプション検出" : "OK"}\n`;
-            pageResult += `  └ [AIコード/不自然文言] ${hasAiCode || hasAiText ? "⚠️ 検出あり" : "OK"}\n`;
-            pageResult += `  └ [半角カタカナ] ${hasHalfKana ? "⚠️ 検出あり" : "OK"}\n`;
+            pageResult += "  └ [タイトル頭出し(都道府県)] " + (hasPrefStart ? "⚠️ 先頭に地名あり" : "OK") + "\n";
+            pageResult += "  └ [カテゴリー] " + (hasCategory ? "OK" : "❌ 未分類") + "\n";
+            pageResult += "  └ [画像キャプション] " + (hasCaption ? "⚠️ キャプション検出" : "OK") + "\n";
+            pageResult += "  └ [AIコード/不自然文言] " + (hasAiCode || hasAiText ? "⚠️ 検出あり" : "OK") + "\n";
+            pageResult += "  └ [半角カタカナ] " + (hasHalfKana ? "⚠️️ 検出あり" : "OK") + "\n";
 
             if (targetUrls.length > 0) {
-                var linkStrs = targetUrls.map(u => `  └ [${u.name}] ${decodeURIComponent(u.url)}`).join("\n");
-                pageResult += `🔗 抽出リンク:\n${linkStrs}\n`;
+                var linkStrs = targetUrls.map(function(u) { return "  └ [" + u.name + "] " + decodeURIComponent(u.url); }).join("\n");
+                pageResult += "🔗 抽出リンク:\n" + linkStrs + "\n";
             } else {
                 pageResult += "🔗 抽出リンク: なし\n";
             }
@@ -207,7 +206,7 @@ javascript:(async function(){
         box.style.cssText = "background:#fff;width:85%;max-width:750px;max-height:85vh;border-radius:8px;padding:20px;box-shadow:0 4px 20px rgba(0,0,0,0.3);display:flex;flex-direction:column;";
         
         var header = document.createElement('div');
-        header.innerHTML = `<h3 style="margin:0 0 10px;font-size:16px;color:#333;">一括WPチェック結果（全 ${urlsToProcess.length} 件）</h3>`;
+        header.innerHTML = '<h3 style="margin:0 0 10px;font-size:16px;color:#333;">一括WPチェック結果（全 ' + urlsToProcess.length + ' 件）</h3>';
         
         var contentArea = document.createElement('div');
         contentArea.style.cssText = "flex:1;overflow-y:auto;white-space:pre-wrap;font-size:13px;line-height:1.6;color:#333;background:#f9f9f9;padding:12px;border:1px solid #ddd;border-radius:4px;";
