@@ -41,7 +41,7 @@
                 cancelBtn.style.cssText = "padding:6px 14px;background:#ccc;color:#333;border:none;border-radius:4px;cursor:pointer;margin-right:8px;font-size:13px;";
                 cancelBtn.onclick = function() {
                     overlay.remove();
-                    resolve(null); // キャンセル時はnullを返す
+                    resolve(null);
                 };
 
                 // チェック実行ボタン
@@ -51,10 +51,9 @@
                 okBtn.onclick = function() {
                     var val = textarea.value;
                     overlay.remove();
-                    resolve(val); // テキストエリアの値を返す
+                    resolve(val);
                 };
 
-                // 要素の組み立て
                 btnArea.appendChild(cancelBtn);
                 btnArea.appendChild(okBtn);
                 box.appendChild(header);
@@ -69,18 +68,16 @@
 
         // 1. 入力モーダルを呼び出してURLリストを取得する
         var inputUrls = await showInputModal();
-        if (inputUrls === null) return; // キャンセルされたら中断
+        if (inputUrls === null) return;
         
         var urlsToProcess = [];
         if (inputUrls && inputUrls.trim() !== "") {
-            // 改行またはカンマ区切りでURLを分割して配列化
             urlsToProcess = inputUrls.split(/[\n,]/).map(function(u){ return u.trim(); }).filter(function(u){ return u.length > 0; });
         } else {
             urlsToProcess = [window.location.href];
         }
 
         var resultsSummary = [];
-        // チェック対象とする見出し項目や都道府県リストの定義
         var r = ["基本情報", "店舗概要", "所在地・アクセス", "営業時間・定休日", "サービス", "設備", "店舗情報一覧", "まとめ", "FAQ", "編集部コメント", "Googleマップ"];
         var prefs = ["北海道", "青森県", "岩手県", "宮城県", "秋田県", "山形県", "福島県", "茨城県", "栃木県", "群馬県", "埼玉県", "千葉県", "東京都", "神奈川県", "新潟県", "富山県", "石川県", "福井県", "山梨県", "長野県", "岐阜県", "静岡県", "愛知県", "三重県", "滋賀県", "京都府", "大阪府", "兵庫県", "奈良県", "和歌山県", "鳥取県", "島根県", "岡山県", "広島県", "山口県", "徳島県", "香川県", "愛媛県", "高知県", "福岡県", "佐賀県", "長崎県", "熊本県", "大分県", "宮崎県", "鹿児島県", "沖縄県"];
 
@@ -103,7 +100,6 @@
             var dateStr = "日付取得できず";
             var targetUrls = [];
 
-            // 現在開いているページと同じならそのままdocumentを使用、それ以外はfetchで取得してパース
             if (targetUrl === window.location.href) {
                 doc = document;
             } else {
@@ -118,7 +114,7 @@
                 }
             }
 
-            // 本文やタイトルの取得
+            // 記事の本文エリアを特定
             var mainContent = doc.querySelector('div.entry-content.cf[itemprop="mainEntityOfPage"], .entry-content.cf, .entry-content, .post-content, .article-body, .entry-body') || doc.body;
             var body = doc.body;
             txt = body ? body.innerText : "";
@@ -126,7 +122,6 @@
             var titleEl = doc.querySelector('.entry-title, h1.post-title, h1');
             titleText = titleEl ? titleEl.innerText.trim() : "（タイトル取得できず）";
 
-            // 公開日時の取得
             var metaPub = doc.querySelector('meta[property="article:published_time"], meta[property="og:article:published_time"], meta[name="pubdate"], meta[name="date"], meta[itemprop="datePublished"]');
             var timeEl = doc.querySelector('time.published, time.entry-date, time[datetime], .date, .post-date, .published');
             
@@ -136,11 +131,9 @@
                 dateStr = (timeEl.getAttribute('datetime') || timeEl.innerText).trim().substring(0, 19);
             }
 
-            // 必須項目のチェック（タイトル・アイキャッチ画像）
             if (!titleEl) m.push("記事タイトル");
             if (!doc.querySelector('.post-thumbnail img, .eyecatch img, header img, .wp-post-image, .attachment-post-thumbnail')) m.push("アイキャッチ画像");
 
-            // タイトル先頭の都道府県チェック
             var hasPrefStart = false;
             for (var j = 0; j < prefs.length; j++) {
                 if (titleText.indexOf(prefs[j]) === 0) {
@@ -150,21 +143,38 @@
                 }
             }
 
-            // ★カテゴリ名の抽出（管理画面のメニュー等を巻き込まないよう .cat-label クラス等を優先指定）
-            var catEls = doc.querySelectorAll('.cat-label, [class*="cat-label"] a, .entry-categories a, .cat-links a, [rel="category tag"]');
+            // ★修正：ページ全体（doc）ではなく、記事ヘッダーや本文周辺、あるいは「.cat-label」に限定しつつサイドバー等を除外する
+            // 記事の上下（entry-header, entry-footer等）に含まれるカテゴリ要素だけに絞り込みます
+            var categoryContainers = doc.querySelectorAll('.entry-header, .entry-footer, .post-meta, .article-header, .article-footer');
+            var catEls = [];
+            if (categoryContainers.length > 0) {
+                // 記事の上下エリアが見つかった場合、その中にあるカテゴリラベルやタグだけを対象にする
+                categoryContainers.forEach(function(container) {
+                    var found = container.querySelectorAll('.cat-label, [class*="cat-label"], a[rel="category tag"], a[href*="/category/"]');
+                    found.forEach(function(el) { catEls.push(el); });
+                });
+            } else {
+                // 見つからない場合は本文エリア内から探す
+                catEls = mainContent.querySelectorAll('.cat-label, [class*="cat-label"], a[rel="category tag"], a[href*="/category/"]');
+            }
+
             var catNames = [];
             catEls.forEach(function(el) {
                 var cName = el.innerText.trim();
-                if (cName && catNames.indexOf(cName) === -1) {
+                // 管理画面特有の文字や件数表示が混入しないよう弾く
+                if (cName && 
+                    cName.indexOf("件の更新") === -1 && 
+                    cName.indexOf("コメントが承認") === -1 && 
+                    cName.indexOf("さん") === -1 && 
+                    catNames.indexOf(cName) === -1) {
                     catNames.push(cName);
                 }
             });
             var categoryStr = catNames.length > 0 ? catNames.join(", ") : "";
 
-            var hasCategory = categoryStr !== "" || doc.querySelector('.cat-label, [class*="cat-label"], .entry-categories, .cat-links');
+            var hasCategory = categoryStr !== "";
             if (!hasCategory) m.push("カテゴリ未分類");
             
-            // 各種見出しの有無をチェック
             r.forEach(function(item) {
                 if (item === "Googleマップ") {
                     if (txt.indexOf("Googleマップ") === -1 && !doc.querySelector('iframe[src*="google.com/maps"]')) m.push("Googleマップなし");
@@ -173,7 +183,6 @@
                 }
             });
 
-            // キャプションやAIコード、半角カタカナ等の異常値チェック
             var hasCaption = doc.querySelectorAll('figcaption, .wp-caption-text').length > 0;
             if (hasCaption) l.push("画像キャプション検出");
             
@@ -187,7 +196,6 @@
             var hasHalfKana = halfWidthKatakanaPattern.test(titleText) || halfWidthKatakanaPattern.test(mainContent.innerText);
             if (hasHalfKana) l.push("半角カタカナ混入");
 
-            // 店舗ありなのに対応エリア記載があるかチェック
             var areaKeywords = ["対応エリア", "出張可能エリア", "出張エリア", "対象エリア"];
             var hasAreaMention = areaKeywords.some(function(kw) { return txt.indexOf(kw) !== -1; });
             var banchiPattern = /\d+[\-−ー\d]+|\d+丁目|\d+番地?|\d+号/;
@@ -195,7 +203,6 @@
                 l.push("店舗ありなのに対応エリア記載");
             }
 
-            // 関連リンク（Googleマップ・店舗情報・編集部コメントなど）の抽出
             var gmap = doc.querySelector('iframe[src*="google.com/maps"], iframe[src*="maps.google"]');
             var mapUrl = gmap ? (gmap.getAttribute('src') || "") : "";
             if (mapUrl) targetUrls.push({ name: "Gmap", url: mapUrl });
@@ -225,7 +232,7 @@
 
             var editorEl = allEls.find(function(el) { return el.children.length === 0 && el.innerText && el.innerText.trim().indexOf('編集部コメント') !== -1; });
             if (editorEl) {
-                var blogcards = Array.from(mainContent.querySelectorAll('.blogcard, .external-blogcard, [class*="blogcard'], .wp-block-embed'));
+                var blogcards = Array.from(mainContent.querySelectorAll('.blogcard, .external-blogcard, [class*="blogcard"], .wp-block-embed'));
                 var targetCard = blogcards.find(function(card) { return (editorEl.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0; });
                 if (targetCard) {
                     var aTag = targetCard.querySelector('a[href]');
@@ -264,7 +271,6 @@
             if (shopInfoUrl) targetUrls.push({ name: "店舗情報", url: shopInfoUrl });
             if (editorCommentUrl) targetUrls.push({ name: "編集部", url: editorCommentUrl });
 
-            // 判定結果のテキスト組み立て
             var pageResult = "[タイトル] " + titleText + "\n[日時] " + dateStr + "\n";
             if (m.length === 0 && l.length === 0) {
                 pageResult += "[ステータス] チェックOK\n";
