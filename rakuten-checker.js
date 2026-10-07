@@ -1,48 +1,49 @@
 (function(){
   try {
+    // --- 1. ページ全体のテキストとHTMLの取得 ---
     const pageText = document.body ? (document.body.innerText || "") : "";
     const fullHtml = document.body ? (document.body.innerHTML || "") : "";
     
     let missing = [];
     let issues = [];
 
-    // 1. タイトルチェック
+    // --- 2. 記事タイトルのチェック ---
     const txtEl = document.querySelector('h1, .entry-title, .diary-title, [class*="title"]');
     const txt = txtEl ? txtEl.innerText.trim() : "";
     if(!txt) missing.push("記事タイトル");
 
-    // 2. 本文エリアの特定
+    // --- 3. 本文エリアの特定（見つからない場合はアラートで中断） ---
     const b = document.querySelector('.real_entry_body, #entry_body, .dText, .entry_body, .entry-content');
     if(!b) {
       alert("エラー: 本文エリアが見つかりません。公開記事ページで実行してください。");
       return;
     }
 
-    // 3. 冒頭画像チェック
+    // --- 4. 冒頭画像の存在チェック ---
     if(!b.querySelector('img')) missing.push("冒頭画像（本文内に画像が見つかりません）");
 
-    // 4. タイトル地名チェック
+    // --- 5. タイトル先頭の地名チェック ---
     if(txt && (/^(北海道|青森県|岩手県|宮城県|秋田県|山形県|福島県|茨城県|栃木県|群馬県|埼玉県|千葉県|東京都|神奈川県|新潟県|富山県|石川県|福井県|山梨県|長野県|岐阜県|静岡県|愛知県|三重県|滋賀県|京都府|大阪府|兵庫県|奈良県|和歌山県|鳥取県|島根県|岡山県|広島県|山口県|徳島県|香川県|愛媛県|高知県|福岡県|佐賀県|長崎県|熊本県|大分県|宮崎県|鹿児島県|沖縄県)/.test(txt) || /^.{1,5}[市区町村]/.test(txt))){
       issues.push("タイトル異常: 先頭が地名（「" + txt.substring(0,8) + "…」）");
     }
 
-    // 5. カテゴリチェック
+    // --- 6. カテゴリの設定・未分類チェック ---
     if(!pageText.includes("カテゴリ") || pageText.includes("カテゴリ：未分類")){
       missing.push("カテゴリ（設定なしまたは未分類）");
     }
 
-    // 6. 必須要素チェック
+    // --- 7. 必須要素（見出し項目）の存在チェック ---
     const requiredItems = ["基本情報","店舗概要","所在地・アクセス","営業時間・定休日","サービス","設備","店舗情報一覧","まとめ","FAQ","編集部コメント","Googleマップ"];
     requiredItems.forEach(function(item){
       if(!pageText.includes(item)) missing.push(item);
     });
 
-    // 7. AI参照コード混入チェック
+    // --- 8. AI参照コードの混入チェック ---
     if(/cit_[a-zA-Z0-9_-]{3,}/i.test(fullHtml) || /data-cit/i.test(fullHtml) || /context[a-zA-Z0-9_-]*/i.test(fullHtml.slice(-2000)) || /cite/i.test(fullHtml.slice(-2000))){
       issues.push("AI参照コード混入疑い: 「cit_...」「context」等のAIコード・属性が検出されました");
     }
 
-    // 8. AI「入力」不適切回答チェック
+    // --- 9. AIの不適切な「入力」文言の混入チェック ---
     const rawMainText = b.innerText || "";
     const cleanMainText = rawMainText.replace(/0\d{1,4}-\d{1,4}-\d{3,4}/g, "");
     const aiPatterns = ["入力されています", "入力情報では", "入力されていません", "入力情報", "「-」と入力", "は「-」"];
@@ -56,7 +57,7 @@
       issues.push("AI異常文言検出: 本文/Q&A内に「" + Array.from(new Set(foundAiWords)).join("」「") + "」が含まれています");
     }
 
-    // --- ▼ 追加：H1〜H3見出しおよび本文中の連続重複ワード判定（「葬儀葬儀」など） ▼ ---
+    // --- 10. 見出しおよび本文中の連続重複ワード（「葬儀葬儀」など）の判定 ---
     const headings = b.querySelectorAll('h1, h2, h3');
     headings.forEach(function(h){
         const ht = h.innerText.trim();
@@ -75,9 +76,16 @@
             issues.push("本文中の重複異常(連続ワード検知): " + dupWord);
         }
     });
-    // --- ▲ ここまで追加 ▲ ---
 
-    // 9. 編集部コメントURL判定
+    // --- 11. [追加判定] 「駅」という文字があるのに「徒歩〜分」「車〜分」などの所要時間がない場合を検知 ---
+    if (/駅/.test(rawMainText)) {
+        var hasAccessTime = /(徒歩|車|バス|タクシー)?\s*\d+\s*分/.test(rawMainText);
+        if (!hasAccessTime) {
+            issues.push("アクセス所要時間抜け: 本文中に「駅」の記載がありますが、徒歩・車などの所要時間（〇分）が見つかりません");
+        }
+    }
+
+    // --- 12. 編集部コメント周辺のURL重複・崩れ判定 ---
     const ci = pageText.indexOf("編集部コメント");
     if(ci !== -1){
       let ct = pageText.substring(ci);
@@ -89,11 +97,11 @@
       }
     }
 
-    // 10. 本文エリア（b）からの外部リンク抽出（完全重複排除）
+    // --- 13. 本文エリアからの外部リンク抽出（完全重複排除） ---
     let collectedUrls = [];
     let targetAnchors = [];
 
-    // A: <a> タグ経由
+    // A: <a> タグ経由のリンク収集
     const anchors = Array.from(b.querySelectorAll('a'));
     anchors.forEach(function(a){
       const rawHref = a.getAttribute('href') || '';
@@ -108,7 +116,7 @@
       } catch(e){}
     });
 
-    // B: 直書きテキスト経由（https://...）
+    // B: 直書きテキスト経由（https://...）のリンク収集
     const rawMatches = rawMainText.match(/https?:\/\/[^\s\<\>"\']+/g) || [];
     rawMatches.forEach(function(url){
       let clean = url.replace(/&amp;/g, '&').replace(/[\s\)\>\]]+$/, '');
@@ -120,10 +128,10 @@
       } catch(e){}
     });
 
-    // 完全な重複排除
+    // 重複したURLを完全に排除
     const finalUrlList = Array.from(new Set(collectedUrls));
 
-    // 別窓（target="_blank"）チェック
+    // --- 14. 外部リンクの別窓（target="_blank"）設定チェック ---
     let nonBlankLinks = targetAnchors.filter(function(a){
       const t = (a.target || a.getAttribute('target') || '').toLowerCase();
       const r = (a.getAttribute('rel') || '').toLowerCase();
@@ -134,10 +142,10 @@
       issues.push("リンク異常: 本文内のaタグリンクで別窓（target=\"_blank\"）になっていないものが " + nonBlankLinks.length + " 件あります");
     }
 
-    // 結果表示メッセージ
+    // --- 15. 判定結果メッセージの組み立て ---
     let msg = "【楽天ブログ判定結果】\n\n";
     if(missing.length === 0 && issues.length === 0){
-      msg += "✅ 問題なし（全項目・冒頭画像・カテゴリ・AIコード・AI不適切文言・重複ワード正常）\n";
+      msg += "✅ 問題なし（全項目・冒頭画像・カテゴリ・AIコード・AI不適切文言・重複ワード・アクセス時間正常）\n";
     } else {
       msg += "❌ 要修正\n";
       if(missing.length > 0) msg += "\n■ 不足要素:\n・" + missing.join("\n・") + "\n";
@@ -153,7 +161,7 @@
 
     alert(msg);
 
-    // リンクの一括展開
+    // --- 16. 検出されたリンクの一括別タブ展開確認 ---
     if(finalUrlList.length > 0 && confirm("確認対象のリンク（" + finalUrlList.length + "件）をすべて別タブで開きますか？")){
       setTimeout(function(){
         finalUrlList.forEach(function(url){
