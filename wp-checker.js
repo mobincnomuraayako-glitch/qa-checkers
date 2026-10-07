@@ -178,6 +178,7 @@
                 continue;
             }
 
+            // ノイズ要素の除去
             var noiseSelectors = [
                 '#wpadminbar', '#adminmenu', '#adminmenuback', '.header-container', 'header',
                 '#sidebar', '.sidebar', 'aside', '.widget', '#secondary',
@@ -212,6 +213,7 @@
             if (!titleEl && !restData) m.push("記事タイトル");
             if (!doc.querySelector('.post-thumbnail img, .eyecatch img, .wp-post-image, .attachment-post-thumbnail')) m.push("アイキャッチ画像");
 
+            // タイトル先頭の都道府県チェック
             var hasPrefStart = false;
             for (var j = 0; j < prefs.length; j++) {
                 if (titleText.indexOf(prefs[j]) === 0) {
@@ -221,6 +223,7 @@
                 }
             }
 
+            // カテゴリーチェック
             var catEls = doc.querySelectorAll('.cat-label, [class*="cat-label"], a[rel="category tag"], a[href*="/category/"]');
             var catNames = [];
             catEls.forEach(function(el) {
@@ -230,6 +233,7 @@
             var categoryStr = catNames.length > 0 ? catNames.join(", ") : "";
             if (categoryStr === "") m.push("カテゴリ未分類");
             
+            // 必須見出しチェック
             r.forEach(function(item) {
                 if (item === "Googleマップ") {
                     if (txt.indexOf("Googleマップ") === -1 && !doc.querySelector('iframe[src*="google.com/maps"]')) m.push("Googleマップなし");
@@ -238,19 +242,31 @@
                 }
             });
 
+            // 画像キャプション検出
             var hasCaption = doc.querySelectorAll('figcaption, .wp-caption-text').length > 0;
             if (hasCaption) l.push("画像キャプション検出");
             
+            // AIコード・不自然文言の混入チェック
             var hasAiCode = /cit_[a-zA-Z0-9_-]{5,}|data-cit|googleapis\.com\/v[0-9]|citation/.test(html);
             if (hasAiCode) l.push("AIコード混入");
 
             var hasAiText = txt.indexOf("入力されています") !== -1 || txt.indexOf("入力情報では") !== -1 || txt.indexOf("「-」と入力") !== -1;
             if (hasAiText) l.push("AI不自然文言");
 
+            // 半角カタカナ混入チェック
             var halfWidthKatakanaPattern = /[\uFF61-\uFF9F]/;
             if (halfWidthKatakanaPattern.test(titleText) || halfWidthKatakanaPattern.test(mainContent.innerText)) {
                 l.push("半角カタカナ混入");
             }
+
+            // --- [追加判定] 「駅」があるのに「徒歩〜分」「車〜分」などの所要時間がない場合を検知 ---
+            if (/駅/.test(txt)) {
+                var hasAccessTime = /(徒歩|車|バス|タクシー)?\s*\d+\s*分/.test(txt);
+                if (!hasAccessTime) {
+                    l.push("アクセス所要時間抜け");
+                }
+            }
+            // -----------------------------------------------------------------------------------
 
             var gmap = doc.querySelector('iframe[src*="google.com/maps"], iframe[src*="maps.google"]');
             if (gmap) targetUrls.push({ name: "Gmap", url: gmap.getAttribute('src') || "" });
@@ -321,6 +337,7 @@
             resultsSummary.push(pageResult);
         }
 
+        // 結果表示モーダルの生成
         var modalId = "wp-checker-modal-result";
         var oldModal = document.getElementById(modalId);
         if (oldModal) oldModal.remove();
