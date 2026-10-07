@@ -21,15 +21,15 @@
                 header.innerText = "WordPress記事URL一括チェック";
                 header.style.cssText = "margin:0 0 10px;font-size:16px;color:#333;";
                 
-                // 注意事項の説明文
+                // 注意事項の説明文（ご要望のテキストを反映）
                 var desc = document.createElement('p');
-                desc.innerText = "チェックしたいURLを改行またはカンマ区切りで貼り付けてください。\n※空欄のまま実行すると、現在開いているページをチェックします。\n※4件以上は不安定です";
-                desc.style.cssText = "margin:0 0 10px;font-size:12px;color:#d9534f;line-height:1.4;font-weight:bold;";
+                desc.innerText = "エラーサイトを入力してください。\nPlease input error your think any sites!\n\n※チェックしたいURLを改行またはカンマ区切りで20件程度まで貼り付け可能です。\n※空欄のまま実行すると、現在開いているページをチェックします。";
+                desc.style.cssText = "margin:0 0 10px;font-size:12px;color:#d9534f;line-height:1.4;font-weight:bold;white-space:pre-wrap;";
 
                 // URL入力を受け付けるテキストエリア
                 var textarea = document.createElement('textarea');
-                textarea.style.cssText = "width:100%;height:150px;padding:8px;font-size:13px;border:1px solid #ddd;border-radius:4px;box-sizing:border-box;resize:vertical;";
-                textarea.placeholder = "https://example.com/post-1\nhttps://example.com/post-2";
+                textarea.style.cssText = "width:100%;height:180px;padding:8px;font-size:13px;border:1px solid #ddd;border-radius:4px;box-sizing:border-box;resize:vertical;";
+                textarea.placeholder = "https://example.com/post-1\nhttps://example.com/post-2\n(最大20件程度まで入力可能)";
                 
                 // ボタン配置用のエリア
                 var btnArea = document.createElement('div');
@@ -92,9 +92,15 @@
             return true;
         }
 
-        // 2. 指定されたURLを1件ずつ順番にフェッチしてチェック処理を実行
+        // 2. 指定されたURLを1件ずつ順番にフェッチしてチェック処理を実行（20件対応・サーバー負荷対策のウェイト付き）
         for (var i = 0; i < urlsToProcess.length; i++) {
             var targetUrl = urlsToProcess[i];
+            
+            // 5件ごとに少し休憩（サーバーブロックやフリーズを防ぐ配慮）
+            if (i > 0 && i % 5 === 0) {
+                await new Promise(function(resolve) { setTimeout(resolve, 1000); });
+            }
+
             var m = [], l = [];
             var doc, html = "", txt = "", titleText = "";
             var dateStr = "日付取得できず";
@@ -105,11 +111,15 @@
             } else {
                 try {
                     var res = await fetch(targetUrl);
+                    if (!res.ok) {
+                        resultsSummary.push("[取得失敗: HTTP " + res.status + "]\nURL: " + decodeURIComponent(targetUrl) + "\n--------------------");
+                        continue;
+                    }
                     var textHtml = await res.text();
                     var parser = new DOMParser();
                     doc = parser.parseFromString(textHtml, "text/html");
                 } catch (fetchErr) {
-                    resultsSummary.push("[取得失敗]\n--------------------");
+                    resultsSummary.push("[取得失敗: ネットワークエラー/CORS制限]\nURL: " + decodeURIComponent(targetUrl) + "\n--------------------");
                     continue;
                 }
             }
@@ -154,7 +164,7 @@
                 }
             }
 
-            // カテゴリの抽出（ノイズ除去済みのドキュメントから安全に取得）
+            // カテゴリの抽出
             var catEls = doc.querySelectorAll('.cat-label, [class*="cat-label"], a[rel="category tag"], a[href*="/category/"]');
             var catNames = [];
             catEls.forEach(function(el) {
@@ -264,7 +274,8 @@
             if (shopInfoUrl) targetUrls.push({ name: "店舗情報", url: shopInfoUrl });
             if (editorCommentUrl) targetUrls.push({ name: "編集部", url: editorCommentUrl });
 
-            var pageResult = "[タイトル] " + titleText + "\n[日時] " + dateStr + "\n";
+            var pageResult = "[対象URL] " + decodeURIComponent(targetUrl) + "\n";
+            pageResult += "[タイトル] " + titleText + "\n[日時] " + dateStr + "\n";
             if (m.length === 0 && l.length === 0) {
                 pageResult += "[ステータス] チェックOK\n";
             } else {
