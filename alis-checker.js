@@ -14,11 +14,11 @@
 
   modal.innerHTML = `
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-      <h3 style="margin: 0; font-size: 18px; color: #1976D2;">🚀 ALIS 複数記事一括チェッカー（詳細表示版）</h3>
+      <h3 style="margin: 0; font-size: 18px; color: #1976D2;">🚀 ALIS 複数記事一括チェッカー（全項目詳細表示版）</h3>
       <button id="abc-close" style="background: #ff5252; color: #fff; border: none; padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: bold;">✕ 閉じる</button>
     </div>
     <p style="margin: 0 0 6px 0; color: #555; font-size: 13px;">チェックしたい記事のURLを1行に1つずつ貼り付けてください：</p>
-    <textarea id="abc-urls" rows="6" placeholder="https://...&#10;https://..." style="width: 100%; padding: 10px; box-sizing: border-box; font-family: monospace; font-size: 13px; border: 1px solid #ccc; border-radius: 6px; resize: vertical;"></textarea>
+    <textarea id="abc-urls" rows="5" placeholder="https://...&#10;https://..." style="width: 100%; padding: 10px; box-sizing: border-box; font-family: monospace; font-size: 13px; border: 1px solid #ccc; border-radius: 6px; resize: vertical;"></textarea>
     <button id="abc-run" style="margin-top: 10px; background: #2196F3; color: #fff; border: none; padding: 10px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 15px; box-shadow: 0 2px 5px rgba(0,0,0,0.2);">一括チェック開始</button>
     <div id="abc-progress" style="margin-top: 10px; font-weight: bold; color: #333; font-size: 13px;"></div>
     <div id="abc-results" style="margin-top: 10px; flex: 1; overflow-y: auto; border: 1px solid #ddd; border-radius: 6px; padding: 10px; background: #fafafa;"></div>
@@ -54,78 +54,95 @@
 
     for (let i = 0; i < urls.length; i++) {
       const targetUrl = urls[i];
-      progressDiv.innerText = `(${i + 1} / ${urls.length}) 取得・解析中...`;
+      progressDiv.innerText = `(${i + 1} / ${urls.length}) 取得・解析中: ${targetUrl}`;
+
+      let okItems = [];
+      let missing = [];
+      let issues = [];
 
       try {
         const response = await fetch(targetUrl);
+        if(!response.ok) throw new Error('HTTP ' + response.status);
         const htmlText = await response.text();
         const parser = new DOMParser();
         const doc = parser.parseFromString(htmlText, 'text/html');
 
         const pageText = doc.body ? (doc.body.innerText || "") : "";
-        let missing = [];
-        let issues = [];
 
         // 1. タイトルチェック
         const txtEl = doc.querySelector('h1, .article-title, [class*="title"]');
         const txt = txtEl ? txtEl.innerText.trim() : "";
-        if(!txt) missing.push("記事タイトル");
+        if(txt) {
+          okItems.push("記事タイトル");
+        } else {
+          missing.push("記事タイトル");
+        }
 
         // 2. 冒頭画像チェック
         const b = doc.querySelector('.area-content, .ck-content, [class*="area-content"], [class*="ck-content"], article, main') || doc.body;
         const firstImg = b ? b.querySelector('img') : null;
-        if(!firstImg) missing.push("冒頭画像");
+        if(firstImg) {
+          okItems.push("冒頭画像");
+        } else {
+          missing.push("冒頭画像");
+        }
 
         // 3. カテゴリチェック
         const categoryEl = doc.querySelector('.area-title, [class*="area-title"]');
         const categoryText = categoryEl ? categoryEl.innerText.trim() : "";
-        if (!categoryEl || !categoryText || categoryText.includes("未分類") || categoryText.includes("設定なし")) {
+        if (categoryEl && categoryText && !categoryText.includes("未分類") && !categoryText.includes("設定なし")) {
+          okItems.push("カテゴリ(" + categoryText + ")");
+        } else {
           missing.push("カテゴリ（area-title）");
         }
 
         // 4. 必須項目の網羅チェック
         const requiredItems = ["基本情報","店舗概要","所在地・アクセス","営業時間・定休日","サービス","設備","店舗情報一覧","まとめ","FAQ","編集部コメント","Googleマップ"];
         requiredItems.forEach(function(item){
-          if(!pageText.includes(item)) missing.push(item);
+          if(pageText.includes(item)) {
+            okItems.push(item);
+          } else {
+            missing.push(item);
+          }
         });
 
         // 5. AI参照コードの混入チェック
         if(/cit_[a-zA-Z0-9_-]{3,}/i.test(htmlText) || /data-cit/i.test(htmlText)){
           issues.push("AI参照コード混入");
+        } else {
+          okItems.push("AI参照コードなし");
         }
 
         // 結果の出力組み立て
         if(missing.length === 0 && issues.length === 0){
           successCount++;
-          htmlReport += `<div style="background:#e8f5e9; border-left: 5px solid #2e7d32; padding:10px; margin-bottom:8px; border-radius:4px; font-size:13px;">
+          htmlReport += `<div style="background:#e8f5e9; border-left: 5px solid #2e7d32; padding:10px; margin-bottom:10px; border-radius:4px; font-size:13px;">
             ✅ <b><a href="${targetUrl}" target="_blank" style="color:#2e7d32; text-decoration:underline;">${targetUrl}</a></b><br>
-            <span style="color:#2e7d32;">問題なし（すべての必須項目・条件をクリアしています）</span>
+            <span style="color:#2e7d32; font-weight:bold;">【判定: 問題なし】</span><br>
+            <span style="color:#1b5e20; font-size:12px;"><b>OK項目 (${okItems.length}件):</b> ${okItems.join(' / ')}</span>
           </div>`;
         } else {
           errorCount++;
-          let detailHtml = "";
-          if(missing.length > 0) {
-            detailHtml += `<div style="color:#c62828; margin-top:4px;">❌ <b>不足している項目:</b> ${missing.join(' / ')}</div>`;
-          }
-          if(issues.length > 0) {
-            detailHtml += `<div style="color:#e65100; margin-top:4px;">⚠️ <b>異常・注意:</b> ${issues.join(' / ')}</div>`;
-          }
-
-          htmlReport += `<div style="background:#ffebee; border-left: 5px solid #c62828; padding:10px; margin-bottom:8px; border-radius:4px; font-size:13px;">
-            ❌ <b><a href="${targetUrl}" target="_blank" style="color:#c62828; text-decoration:underline;">${targetUrl}</a></b>
-            ${detailHtml}
+          htmlReport += `<div style="background:#ffebee; border-left: 5px solid #c62828; padding:10px; margin-bottom:10px; border-radius:4px; font-size:13px;">
+            ❌ <b><a href="${targetUrl}" target="_blank" style="color:#c62828; text-decoration:underline;">${targetUrl}</a></b><br>
+            <span style="color:#c62828; font-weight:bold;">【判定: 要確認・エラーあり】</span><br>
+            ${missing.length > 0 ? `<div style="color:#c62828; margin-top:4px;">❌ <b>不足している項目 (${missing.length}件):</b> ${missing.join(' / ')}</div>` : ''}
+            ${issues.length > 0 ? `<div style="color:#e65100; margin-top:4px;">⚠️ <b>異常・注意:</b> ${issues.join(' / ')}</div>` : ''}
+            <div style="color:#2e7d32; margin-top:4px; font-size:12px;">✅ <b>クリアした項目:</b> ${okItems.join(' / ')}</div>
           </div>`;
         }
 
       } catch (err) {
         errorCount++;
-        htmlReport += `<div style="background:#fff3e0; border-left: 5px solid #e65100; padding:10px; margin-bottom:8px; border-radius:4px; font-size:13px;">
+        htmlReport += `<div style="background:#fff3e0; border-left: 5px solid #e65100; padding:10px; margin-bottom:10px; border-radius:4px; font-size:13px;">
           ⚠️ <b><a href="${targetUrl}" target="_blank" style="color:#e65100; text-decoration:underline;">${targetUrl}</a></b><br>
-          <span style="color:#e65100;">取得失敗（CORS制限や存在しないURLの可能性があります）</span>
+          <span style="color:#e65100; font-weight:bold;">【取得失敗】</span><br>
+          <span style="color:#e65100; font-size:12px;">エラー詳細: ${err.message}（※CORS制限や存在しないURLの可能性があります）</span>
         </div>`;
       }
 
       resultsDiv.innerHTML = htmlReport;
+      await new Promise(r => setTimeout(r, 200)); // 0.2秒のウェイト
     }
 
     progressDiv.innerText = `チェック完了！ 正常: ${successCount}件 / 要確認・エラー: ${errorCount}件`;
