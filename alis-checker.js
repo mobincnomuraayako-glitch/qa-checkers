@@ -14,7 +14,7 @@
 
   modal.innerHTML = `
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-      <h3 style="margin: 0; font-size: 18px; color: #1976D2;">🚀 ALIS 複数記事一括チェッカー（全項目詳細表示版）</h3>
+      <h3 style="margin: 0; font-size: 18px; color: #1976D2;">🚀 ALIS 複数記事一括チェッカー（半角カナ検知・全項目表示版）</h3>
       <button id="abc-close" style="background: #ff5252; color: #fff; border: none; padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: bold;">✕ 閉じる</button>
     </div>
     <p style="margin: 0 0 6px 0; color: #555; font-size: 13px;">チェックしたい記事のURLを1行に1つずつ貼り付けてください：</p>
@@ -73,7 +73,7 @@
         const txtEl = doc.querySelector('h1, .article-title, [class*="title"]');
         const txt = txtEl ? txtEl.innerText.trim() : "";
         if(txt) {
-          okItems.push("記事タイトル");
+          okItems.push("記事タイトル: " + txt.substring(0, 20) + "...");
         } else {
           missing.push("記事タイトル");
         }
@@ -91,7 +91,7 @@
         const categoryEl = doc.querySelector('.area-title, [class*="area-title"]');
         const categoryText = categoryEl ? categoryEl.innerText.trim() : "";
         if (categoryEl && categoryText && !categoryText.includes("未分類") && !categoryText.includes("設定なし")) {
-          okItems.push("カテゴリ(" + categoryText + ")");
+          okItems.push("カテゴリ (" + categoryText + ")");
         } else {
           missing.push("カテゴリ（area-title）");
         }
@@ -113,22 +113,34 @@
           okItems.push("AI参照コードなし");
         }
 
+        // 6. 半角カタカナの混入チェック
+        const halfKanaPattern = /[\uff66-\uff9f]/;
+        if (halfKanaPattern.test(pageText) || halfKanaPattern.test(htmlText)) {
+          issues.push("半角カタカナ混入");
+        } else {
+          okItems.push("半角カタカナなし");
+        }
+
         // 結果の出力組み立て
         if(missing.length === 0 && issues.length === 0){
           successCount++;
           htmlReport += `<div style="background:#e8f5e9; border-left: 5px solid #2e7d32; padding:10px; margin-bottom:10px; border-radius:4px; font-size:13px;">
             ✅ <b><a href="${targetUrl}" target="_blank" style="color:#2e7d32; text-decoration:underline;">${targetUrl}</a></b><br>
             <span style="color:#2e7d32; font-weight:bold;">【判定: 問題なし】</span><br>
-            <span style="color:#1b5e20; font-size:12px;"><b>OK項目 (${okItems.length}件):</b> ${okItems.join(' / ')}</span>
+            <div style="color:#1b5e20; margin-top:4px; font-size:12px; background:rgba(255,255,255,0.6); padding:6px; border-radius:4px;">
+              <b>✔ クリアした項目 (${okItems.length}件):</b><br>${okItems.join(' / ')}
+            </div>
           </div>`;
         } else {
           errorCount++;
           htmlReport += `<div style="background:#ffebee; border-left: 5px solid #c62828; padding:10px; margin-bottom:10px; border-radius:4px; font-size:13px;">
             ❌ <b><a href="${targetUrl}" target="_blank" style="color:#c62828; text-decoration:underline;">${targetUrl}</a></b><br>
             <span style="color:#c62828; font-weight:bold;">【判定: 要確認・エラーあり】</span><br>
-            ${missing.length > 0 ? `<div style="color:#c62828; margin-top:4px;">❌ <b>不足している項目 (${missing.length}件):</b> ${missing.join(' / ')}</div>` : ''}
-            ${issues.length > 0 ? `<div style="color:#e65100; margin-top:4px;">⚠️ <b>異常・注意:</b> ${issues.join(' / ')}</div>` : ''}
-            <div style="color:#2e7d32; margin-top:4px; font-size:12px;">✅ <b>クリアした項目:</b> ${okItems.join(' / ')}</div>
+            ${missing.length > 0 ? `<div style="color:#c62828; margin-top:4px; background:rgba(255,255,255,0.8); padding:6px; border-radius:4px;">❌ <b>不足している項目 (${missing.length}件):</b><br>${missing.join(' / ')}</div>` : ''}
+            ${issues.length > 0 ? `<div style="color:#e65100; margin-top:4px; background:rgba(255,255,255,0.8); padding:6px; border-radius:4px;">⚠️ <b>異常・注意（半角カナ・AIコード等）:</b><br>${issues.join(' / ')}</div>` : ''}
+            <div style="color:#2e7d32; margin-top:4px; font-size:12px; background:rgba(255,255,255,0.6); padding:6px; border-radius:4px;">
+              <b>✔ クリアした項目 (${okItems.length}件):</b><br>${okItems.join(' / ')}
+            </div>
           </div>`;
         }
 
@@ -142,7 +154,7 @@
       }
 
       resultsDiv.innerHTML = htmlReport;
-      await new Promise(r => setTimeout(r, 200)); // 0.2秒のウェイト
+      await new Promise(r => setTimeout(r, 100));
     }
 
     progressDiv.innerText = `チェック完了！ 正常: ${successCount}件 / 要確認・エラー: ${errorCount}件`;
