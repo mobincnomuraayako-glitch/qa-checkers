@@ -152,4 +152,14 @@
         htmlReport += `<div style="background:#fff3e0; border-left: 5px solid #e65100; padding:10px; margin-bottom:10px; border-radius:4px; font-size:13px;">
           ⚠️ <b><a href="${targetUrl}" target="_blank" style="color:#e65100; text-decoration:underline;">${targetUrl}</a></b><br>
           <span style="color:#e65100; font-weight:bold;">【取得失敗】</span><br>
-          <span style="color:#e65
+          <span style="color:#e65100; font-size:12px;">エラー詳細: ${err.message}（※CORS制限や存在しないURLの可能性があります）</span>
+        </div>`;
+      }
+
+      resultsDiv.innerHTML = htmlReport;
+      await new Promise(r => setTimeout(r, 100));
+    }
+
+    progressDiv.innerText = `チェック完了！ 正常: ${successCount}件 / 要確認・エラー: ${errorCount}件`;
+  });
+})();
