@@ -14,7 +14,7 @@
 
   modal.innerHTML = `
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-      <h3 style="margin: 0; font-size: 18px; color: #1976D2;">🚀 ALIS 複数記事一括チェッカー（半角カナ検知・全項目表示版）</h3>
+      <h3 style="margin: 0; font-size: 18px; color: #1976D2;">🚀 ALIS 複数記事一括チェッカー（半角カナ詳細表示版）</h3>
       <button id="abc-close" style="background: #ff5252; color: #fff; border: none; padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: bold;">✕ 閉じる</button>
     </div>
     <p style="margin: 0 0 6px 0; color: #555; font-size: 13px;">チェックしたい記事のURLを1行に1つずつ貼り付けてください：</p>
@@ -113,10 +113,13 @@
           okItems.push("AI参照コードなし");
         }
 
-        // 6. 半角カタカナの混入チェック
-        const halfKanaPattern = /[\uff66-\uff9f]/;
-        if (halfKanaPattern.test(pageText) || halfKanaPattern.test(htmlText)) {
-          issues.push("半角カタカナ混入");
+        // 6. 半角カタカナの混入チェック（見つかった具体的な文字や周辺も抜き出す）
+        const halfKanaRegex = /[\uff66-\uff9f]+/g;
+        const matchedKanas = pageText.match(halfKanaRegex);
+        if (matchedKanas && matchedKanas.length > 0) {
+          // 重複を削って、見つかった半角カナをまとめる
+          const uniqueKanas = Array.from(new Set(matchedKanas)).join(', ');
+          issues.push(`半角カタカナ混入: [ ${uniqueKanas} ]`);
         } else {
           okItems.push("半角カタカナなし");
         }
@@ -137,7 +140,7 @@
             ❌ <b><a href="${targetUrl}" target="_blank" style="color:#c62828; text-decoration:underline;">${targetUrl}</a></b><br>
             <span style="color:#c62828; font-weight:bold;">【判定: 要確認・エラーあり】</span><br>
             ${missing.length > 0 ? `<div style="color:#c62828; margin-top:4px; background:rgba(255,255,255,0.8); padding:6px; border-radius:4px;">❌ <b>不足している項目 (${missing.length}件):</b><br>${missing.join(' / ')}</div>` : ''}
-            ${issues.length > 0 ? `<div style="color:#e65100; margin-top:4px; background:rgba(255,255,255,0.8); padding:6px; border-radius:4px;">⚠️ <b>異常・注意（半角カナ・AIコード等）:</b><br>${issues.join(' / ')}</div>` : ''}
+            ${issues.length > 0 ? `<div style="color:#e65100; margin-top:4px; background:rgba(255,255,255,0.8); padding:6px; border-radius:4px;">⚠️ <b>異常・注意（半角カナ・AIコード等）:</b><br>${issues.join('<br>')}</div>` : ''}
             <div style="color:#2e7d32; margin-top:4px; font-size:12px; background:rgba(255,255,255,0.6); padding:6px; border-radius:4px;">
               <b>✔ クリアした項目 (${okItems.length}件):</b><br>${okItems.join(' / ')}
             </div>
@@ -149,14 +152,4 @@
         htmlReport += `<div style="background:#fff3e0; border-left: 5px solid #e65100; padding:10px; margin-bottom:10px; border-radius:4px; font-size:13px;">
           ⚠️ <b><a href="${targetUrl}" target="_blank" style="color:#e65100; text-decoration:underline;">${targetUrl}</a></b><br>
           <span style="color:#e65100; font-weight:bold;">【取得失敗】</span><br>
-          <span style="color:#e65100; font-size:12px;">エラー詳細: ${err.message}（※CORS制限や存在しないURLの可能性があります）</span>
-        </div>`;
-      }
-
-      resultsDiv.innerHTML = htmlReport;
-      await new Promise(r => setTimeout(r, 100));
-    }
-
-    progressDiv.innerText = `チェック完了！ 正常: ${successCount}件 / 要確認・エラー: ${errorCount}件`;
-  });
-})();
+          <span style="color:#e65
