@@ -1,236 +1,167 @@
 (function(){
-  try {
-    const targetDoc = document;
-    const r = ["基本情報","店舗概要","所在地・アクセス","営業時間・定休日","サービス","設備","店舗情報一覧","まとめ","FAQ","編集部コメント","Googleマップ"];
-    let m = [], l = [];
-
-    const pageText = (targetDoc.body ? targetDoc.body.innerText : "").replace(/\s+/g, " ");
-    const fullHtml = targetDoc.body ? targetDoc.body.innerHTML : "";
-    const mainArea = targetDoc.querySelector('.entry-body,.entry-content,.entry,.entry-inner,#alpha-inner') || targetDoc.body;
+  async function runBatchCheck() {
+    // 1. 記事一覧ページから記事のリンク（URLとタイトル）を自動抽出
+    const linkElements = document.querySelectorAll('.entry-title a, .entry-subject a, h3 a, h2 a, a[href*=".html"]');
+    let targets = [];
     
-    const txE = targetDoc.querySelector('.entry-header,.entry-title,h3.entry-header,h1,.entry-subject');
-    const tx = txE ? txE.innerText.trim() : "";
-    if (!tx) m.push("記事タイトル");
+    linkElements.forEach(a => {
+      const href = a.href;
+      const title = a.innerText.trim();
+      if (href && !targets.some(t => t.url === href) && (href.includes('cocolog-nifty.com') || href.startsWith('http'))) {
+        targets.push({ url: href, title: title });
+      }
+    });
 
-    const fI = mainArea.querySelector('img');
-    if (!fI) m.push("画像設置（本文内に画像が見つかりません）");
+    // 重複や余分なリンクを除外し、最大50件に絞る
+    targets = targets.slice(0, 50);
 
-    if (tx && (/(北海道|青森|岩手|宮城|秋田|山形|福島|茨城|栃木|群馬|埼玉|千葉|東京|神奈川|新潟|富山|石川|福井|山梨|長野|岐阜|静岡|愛知|三重|滋賀|京都|大阪|兵庫|奈良|和歌山|鳥取|島根|岡山|広島|山口|徳島|香川|愛媛|高知|福岡|佐賀|長崎|熊本|大分|宮崎|鹿児島|沖縄)/.test(tx) || /^.{1,5}[市区町村]/.test(tx))) {
-      l.push("タイトル異常: 先頭が地名");
+    if (targets.length === 0) {
+      alert("この記事一覧ページから判定対象のリンクが見つかりませんでした。記事一覧画面でお試しください。");
+      return;
     }
 
-    if (!pageText.includes("カテゴリ") || pageText.includes("カテゴリ：未分類") || pageText.includes("カテゴリー：未分類")){
-      m.push("カテゴリ（設定なしまたは未分類）");
-    }
+    // 進捗表示用モーダルの作成
+    let progressOverlay = document.getElementById('cocolog-batch-modal');
+    if (progressOverlay) progressOverlay.remove();
 
-    const gI = mainArea.querySelector('iframe[src*="maps.google.com"],iframe[src*="google.com/maps"]');
-    const gA = mainArea.querySelector('a[href*="maps.google.com"],a[href*="google.com/maps"],a[href*="goo.gl/maps"],a[href*="maps.app.goo.gl"]');
+    progressOverlay = document.createElement('div');
+    progressOverlay.id = 'cocolog-batch-modal';
+    progressOverlay.style.cssText = "position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.6); z-index:999999; display:flex; align-items:center; justify-content:center; font-family:sans-serif;";
+    
+    const progressBox = document.createElement('div');
+    progressBox.style.cssText = "background:#fff; padding:25px 30px; border-radius:8px; width:90%; max-width:650px; max-height:85vh; overflow-y:auto; box-shadow:0 4px 20px rgba(0,0,0,0.3); font-size:13px; color:#333;";
+    progressBox.innerHTML = `<h2 style='margin-top:0; font-size:18px;'>【一括DOM判定 実行中...】</h2><p id='batch-status' style='font-weight:bold; color:#007bff;'>0 / ${targets.length} 記事をチェック中...</p><div id='batch-results-preview' style='margin-top:15px; max-height:50vh; overflow-y:auto; border-top:1px solid #eee; padding-top:10px;'></div>`;
+    
+    progressOverlay.appendChild(progressBox);
+    document.body.appendChild(progressOverlay);
 
-    function hP(u){
-      if (!u) return false;
-      return /[?&](q|query|cid)=/.test(u) || /!3d[-0-9.]*!4d[-0-9.]*/.test(u) || u.includes('maps.google.com/1') || u.includes('maps.app.goo.gl');
-    }
+    const statusText = document.getElementById('batch-status');
+    const previewContainer = document.getElementById('batch-results-preview');
+    let batchResults = [];
 
-    let mU = "";
-    if (gI) mU = gI.getAttribute('src') || "";
-    else if (gA) mU = gA.getAttribute('href') || "";
+    // 2. 1件ずつフェッチして判定を実行
+    for (let i = 0; i < targets.length; i++) {
+      const target = targets[i];
+      statusText.innerText = `${i + 1} / ${targets.length} 記事をチェック中: ${target.title || target.url}`;
 
-    r.forEach(i => {
-      if (i === "Googleマップ") {
-        if (!pageText.includes("Googleマップ") && !gI && !gA) {
-          m.push("Googleマップ");
-        } else if ((gI || gA) && !hP(mU)) {
-          m.push("Googleマップ（ピン未設定）");
+      try {
+        const response = await fetch(target.url);
+        const htmlText = await response.text();
+        
+        // 取得したHTMLを仮想DOMに展開して解析
+        const parser = new DOMParser();
+        const targetDoc = parser.parseFromString(htmlText, 'text/html');
+
+        const r = ["基本情報","店舗概要","所在地・アクセス","営業時間・定休日","サービス","設備","店舗情報一覧","まとめ","FAQ","編集部コメント","Googleマップ"];
+        let m = [], l = [];
+
+        const pageText = (targetDoc.body ? targetDoc.body.innerText : "").replace(/\s+/g, " ");
+        const fullHtml = targetDoc.body ? targetDoc.body.innerHTML : "";
+        const mainArea = targetDoc.querySelector('.entry-body,.entry-content,.entry,.entry-inner,#alpha-inner') || targetDoc.body;
+        
+        const txE = targetDoc.querySelector('.entry-header,.entry-title,h3.entry-header,h1,.entry-subject');
+        const tx = txE ? txE.innerText.trim() : target.title;
+        if (!tx) m.push("記事タイトル");
+
+        const fI = mainArea.querySelector('img');
+        if (!fI) m.push("画像設置（本文内に画像が見つかりません）");
+
+        if (!pageText.includes("カテゴリ") || pageText.includes("カテゴリ：未分類") || pageText.includes("カテゴリー：未分類")){
+          m.push("カテゴリ設定なし");
         }
-      } else {
-        if (!pageText.includes(i)) m.push(i);
-      }
-    });
 
-    if (/cit_[a-zA-Z0-9_-]{5,}/.test(fullHtml) || /data-cit/.test(fullHtml)) {
-      l.push("AIコンテキストコード混入");
-    }
+        const gI = mainArea.querySelector('iframe[src*="maps.google.com"],iframe[src*="google.com/maps"]');
+        const gA = mainArea.querySelector('a[href*="maps.google.com"],a[href*="google.com/maps"],a[href*="goo.gl/maps"],a[href*="maps.app.goo.gl"]');
 
-    // --- ▼ 連続するシャープ（##, ### など）の検出 ▼ ---
-    const sharpMatch = pageText.match(/#{2,}/);
-    if (sharpMatch) {
-      l.push("連続シャープの混入検知: " + sharpMatch[0]);
-    }
-
-    // --- ▼ 見出しおよび本文中の連続重複ワード判定 ▼ ---
-    const headingsForDup = mainArea.querySelectorAll('h1, h2, h3');
-    headingsForDup.forEach(function(h){
-        const ht = h.innerText.trim();
-        if(/([一-龥]{2,})\1/.test(ht) || /([\u3040-\u309F]{2,})\1/.test(ht)) {
-            l.push("見出しの重複異常(連続ワード): " + ht);
+        function hP(u){
+          if (!u) return false;
+          return /[?&](q|query|cid)=/.test(u) || /!3d[-0-9.]*!4d[-0-9.]*/.test(u) || u.includes('maps.google.com/1') || u.includes('maps.app.goo.gl');
         }
-    });
 
-    const paragraphsForDup = mainArea.querySelectorAll('p, li');
-    paragraphsForDup.forEach(function(p){
-        const pt = p.innerText.trim();
-        const matchKanji = pt.match(/([一-龥]{2,})\1/);
-        const matchHira = pt.match(/([\u3040-\u309F]{2,})\1/);
-        if((matchKanji || matchHira) && !l.some(function(msg){ return msg.includes("本文中の重複異常"); })) {
-            const dupWord = matchKanji ? matchKanji[1] : matchHira[1];
-            l.push("本文中の重複異常(連続ワード検知): " + dupWord);
+        let mU = "";
+        if (gI) mU = gI.getAttribute('src') || "";
+        else if (gA) mU = gA.getAttribute('href') || "";
+
+        r.forEach(i => {
+          if (i === "Googleマップ") {
+            if (!pageText.includes("Googleマップ") && !gI && !gA) m.push("Googleマップ");
+            else if ((gI || gA) && !hP(mU)) m.push("Googleマップ（ピン未設定）");
+          } else {
+            if (!pageText.includes(i)) m.push(i);
+          }
+        });
+
+        if (/cit_[a-zA-Z0-9_-]{5,}/.test(fullHtml) || /data-cit/.test(fullHtml)) {
+          l.push("AIコンテキストコード混入");
         }
-    });
 
-    // --- ▼ 必須リンク・URLの強力な抽出＆バックスラッシュチェック処理 ▼ ---
-    const allLinks = mainArea.querySelectorAll('a[href]');
-    let detectedUrls = [];
-    let officialLinkCount = 0;
-    let hasGmapLink = (gI || gA);
+        const sharpMatch = pageText.match(/#{2,}/);
+        if (sharpMatch) l.push("連続シャープ検知: " + sharpMatch[0]);
 
-    allLinks.forEach(a => {
-      const href = a.getAttribute('href');
-      if (!href || !href.startsWith('http')) return;
+        // バックスラッシュチェック
+        const allLinks = mainArea.querySelectorAll('a[href]');
+        let officialLinkCount = 0;
+        let hasGmapLink = (gI || gA);
+        allLinks.forEach(a => {
+          const href = a.getAttribute('href');
+          if (!href || !href.startsWith('http')) return;
+          if (href.includes('\\')) l.push("URLにバックスラッシュ");
+          if (href.includes('maps.google.com') || href.includes('google.com/maps') || href.includes('goo.gl/maps') || href.includes('maps.app.goo.gl')) {
+            hasGmapLink = true;
+          } else if (!href.includes('cocolog-nifty.com') && !href.includes('google.com')) {
+            officialLinkCount++;
+          }
+        });
 
-      // バックスラッシュチェック
-      if (href.includes('\\')) {
-        l.push("URLにバックスラッシュが含まれています: " + href);
-      }
+        if (officialLinkCount < 2) m.push("公式サイトリンク不足");
+        if (!hasGmapLink) m.push("Googleマップリンク未設置");
 
-      if (href.includes('maps.google.com') || href.includes('google.com/maps') || href.includes('goo.gl/maps') || href.includes('maps.app.goo.gl')) {
-        hasGmapLink = true;
-        detectedUrls.push({name: "Googleマップリンク", url: href});
-      }
-      else if (!href.includes('cocolog-nifty.com') && !href.includes('google.com')) {
-        officialLinkCount++;
-        detectedUrls.push({name: "公式サイト/外部リンク (" + officialLinkCount + "つ目)", url: href});
-      }
-    });
+        batchResults.push({
+          title: tx || target.title || "無題の記事",
+          url: target.url,
+          missing: m,
+          errors: l,
+          isOk: (m.length === 0 && l.length === 0)
+        });
 
-    if (gI) {
-      detectedUrls.push({name: "Googleマップ(埋め込み)", url: gI.src});
-      if (gI.src.includes('\\')) {
-        l.push("マップ埋め込みURLにバックスラッシュが含まれています: " + gI.src);
-      }
-    }
-
-    if (officialLinkCount < 2) {
-      m.push("公式サイトのリンク不足（店舗情報一覧または編集部コメントのリンクが未設置/テキスト化の可能性）");
-    }
-    if (!hasGmapLink) {
-      m.push("Googleマップセクションのリンク（または埋め込み）が未設置");
-    }
-
-    // --- ▼ 所在地・アクセス周辺の地域・対応エリア＆番地判定 ▼ ---
-    let accessText = pageText;
-    const headings = mainArea.querySelectorAll('h2, h3, h4');
-    let accessHeading = null;
-    for (let h of headings) {
-      if (h.innerText.includes("所在地・アクセス")) {
-        accessHeading = h;
-        break;
+      } catch (err) {
+        batchResults.push({
+          title: target.title || target.url,
+          url: target.url,
+          missing: ["ページ取得・解析エラー (CORS/アクセス権等)"],
+          errors: [],
+          isOk: false
+        });
       }
     }
 
-    if (accessHeading) {
-      let subTexts = [];
-      let sibling = accessHeading.nextElementSibling;
-      while (sibling) {
-        if (['H2', 'H3', 'H4'].includes(sibling.tagName)) break;
-        subTexts.push(sibling.innerText);
-        sibling = sibling.nextElementSibling;
-      }
-      if (subTexts.length > 0) {
-        accessText = subTexts.join("\n");
-      }
-    }
-
-    const areaKeywords = ["エリア", "対象", "地域", "周辺", "近隣", "対応", "出張"];
-    const hasAreaMention = areaKeywords.some(kw => accessText.includes(kw));
-
-    if (hasAreaMention) {
-      const banchiPattern = /\d+[\-−ー\d]+|\d+丁目|\d+番地?|\d+号/;
-      if (banchiPattern.test(accessText)) {
-        l.push("店舗あり(番地記載あり)のため『対応エリア・地域』等の記載不可");
-      }
-    }
-
-    // --- ▼ 設備セクションの禁止ワードチェック ▼ ---
-    let equipmentText = "";
-    let equipmentHeading = null;
-    for (let h of headings) {
-      if (h.innerText.includes("設備")) {
-        equipmentHeading = h;
-        break;
-      }
-    }
-
-    if (equipmentHeading) {
-      let subTexts = [];
-      let sibling = equipmentHeading.nextElementSibling;
-      while (sibling) {
-        if (['H2', 'H3', 'H4'].includes(sibling.tagName)) break;
-        subTexts.push(sibling.innerText);
-        sibling = sibling.nextElementSibling;
-      }
-      if (subTexts.length > 0) {
-        equipmentText = subTexts.join("\n");
-      }
-    }
-
-    const ngEquipmentKeywords = ["スタッフ", "対応", "マンツーマン", "施術", "空間", "特徴"];
-    const foundNgKeywords = ngEquipmentKeywords.filter(kw => equipmentText.includes(kw));
-    if (foundNgKeywords.length > 0 && !equipmentText.includes("公開情報では確認できませんでした")) {
-      l.push("設備セクションにサービスや特徴の文言混入 (検出ワード: " + foundNgKeywords.join(", ") + ")");
-    }
-
-    // --- ▼ HTML出力・リンク確認ボタン付きUIの生成 ▼ ---
-    let resHtml = "<h2 style='margin-top:0; font-size:18px;'>【ココログ 判定結果】</h2>";
-    if (m.length === 0 && l.length === 0) {
-      resHtml += "<p style='color:green; font-weight:bold;'>✅ 問題なし（全項目・リンク・エリア・設備・重複ワード・シャープ正常）</p>";
-    } else {
-      resHtml += "<p style='color:red; font-weight:bold;'>❌ 要修正</p>";
-      if (m.length > 0) {
-        resHtml += "<p style='font-weight:bold; margin-top:10px;'>■ 不足要素:</p><ul style='margin:0; padding-left:20px;'>";
-        m.forEach(item => resHtml += "<li>" + item + "</li>");
-        resHtml += "</ul>";
-      }
-      if (l.length > 0) {
-        resHtml += "<p style='font-weight:bold; margin-top:10px;'>■ 異常検出:</p><ul style='margin:0; padding-left:20px;'>";
-        l.forEach(item => resHtml += "<li>" + item + "</li>");
-        resHtml += "</ul>";
-      }
-    }
-
-    if (detectedUrls.length > 0) {
-      resHtml += "<hr style='margin:15px 0; border:0; border-top:1px solid #ddd;'>";
-      resHtml += "<p style='font-weight:bold; margin-bottom:5px;'>🔗 検出されたリンクの生存確認（クリックで別タブオープン）:</p>";
-      resHtml += "<ul style='margin:0; padding-left:20px;'>";
-      const uniqueUrls = Array.from(new Set(detectedUrls.map(d => d.url)))
-        .map(url => detectedUrls.find(d => d.url === url));
+    // 3. 全判定終了後、結果を綺麗に一覧表示
+    let finalHtml = "<h2 style='margin-top:0; font-size:18px;'>【一括判定 結果一覧 (" + batchResults.length + "記事)】</h2>";
+    
+    batchResults.forEach((res, index) => {
+      const statusColor = res.isOk ? "green" : "red";
+      const statusIcon = res.isOk ? "✅" : "❌";
       
-      uniqueUrls.forEach(d => {
-        resHtml += `<li style='margin-bottom:6px;'><a href='${d.url}' target='_blank' style='color:#007bff; text-decoration:underline; font-weight:bold;'>[${d.name}]<br><span style='font-size:11px; color:#555;'>${d.url}</span></a></li>`;
-      });
-      resHtml += "</ul>";
-    }
+      finalHtml += `<div style='margin-bottom:12px; padding:10px; background:#f9f9f9; border-left:4px solid ${statusColor}; border-radius:4px;'>`;
+      finalHtml += `<div style='font-weight:bold; font-size:13px;'><a href='${res.url}' target='_blank' style='color:#333; text-decoration:none;'>${index + 1}. ${statusIcon} ${res.title}</a></div>`;
+      
+      if (!res.isOk) {
+        finalHtml += "<ul style='margin:5px 0 0 20px; padding:0; color:#d9534f; font-size:12px;'>";
+        res.missing.forEach(item => finalHtml += `<li>[不足] ${item}</li>`);
+        res.errors.forEach(item => finalHtml += `<li>[異常] ${item}</li>`);
+        finalHtml += "</ul>";
+      } else {
+        finalHtml += "<div style='color:green; font-size:11px; margin-top:3px;'>問題なし</div>";
+      }
+      finalHtml += `</div>`;
+    });
 
-    const oldModal = document.getElementById('cocolog-checker-modal');
-    if (oldModal) oldModal.remove();
-
-    const overlay = document.createElement('div');
-    overlay.id = 'cocolog-checker-modal';
-    overlay.style.cssText = "position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:999999; display:flex; align-items:center; justify-content:center; font-family:sans-serif;";
+    progressBox.innerHTML = finalHtml + "<button id='close-batch-modal' style='display:block; width:100%; margin-top:20px; padding:10px; background:#007bff; color:#fff; border:none; border-radius:4px; font-size:15px; cursor:pointer; font-weight:bold;'>閉じる</button>";
     
-    const box = document.createElement('div');
-    box.style.cssText = "background:#fff; padding:20px 25px; border-radius:8px; width:90%; max-width:550px; max-height:85vh; overflow-y:auto; box-shadow:0 4px 15px rgba(0,0,0,0.3); font-size:13px; color:#333; line-height:1.5; word-break:break-all;";
-    box.innerHTML = resHtml;
-
-    const closeBtn = document.createElement('button');
-    closeBtn.innerText = "閉じる";
-    closeBtn.style.cssText = "display:block; width:100%; margin-top:20px; padding:10px; background:#007bff; color:#fff; border:none; border-radius:4px; font-size:15px; cursor:pointer; font-weight:bold;";
-    closeBtn.onclick = function() { overlay.remove(); };
-
-    box.appendChild(closeBtn);
-    overlay.appendChild(box);
-    document.body.appendChild(overlay);
-
-  } catch(e) {
-    alert("判定エラー: " + e.message);
+    document.getElementById('close-batch-modal').onclick = function() {
+      progressOverlay.remove();
+    };
   }
+
+  runBatchCheck();
 })();
