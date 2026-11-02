@@ -1,54 +1,65 @@
 (function(){
-  async function runBatchCheck() {
-    // 1. 記事一覧ページから記事のリンク（URLとタイトル）を自動抽出
-    const linkElements = document.querySelectorAll('.entry-title a, .entry-subject a, h3 a, h2 a, a[href*=".html"]');
-    let targets = [];
+  // 1. 既存のモーダルがあれば削除
+  const oldModal = document.getElementById('cocolog-checker-modal');
+  if (oldModal) oldModal.remove();
+
+  // 2. モーダルUIの構築
+  const overlay = document.createElement('div');
+  overlay.id = 'cocolog-checker-modal';
+  overlay.style.cssText = "position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.6); z-index:999999; display:flex; align-items:center; justify-content:center; font-family:sans-serif;";
+
+  const box = document.createElement('div');
+  box.style.cssText = "background:#fff; padding:20px 25px; border-radius:8px; width:90%; max-width:650px; max-height:85vh; overflow-y:auto; box-shadow:0 4px 20px rgba(0,0,0,0.3); font-size:13px; color:#333; line-height:1.5;";
+  
+  box.innerHTML = `
+    <h2 style="margin-top:0; font-size:18px;">【ココログ 一括DOM判定チェッカー】</h2>
+    <p style="margin-bottom:8px; font-weight:bold; color:#555;">チェックしたい記事のURLを改行区切りで貼り付けてください（20〜50件対応）:</p>
+    <textarea id="cocolog-url-input" rows="8" style="width:100%; padding:10px; border:1px solid #ccc; border-radius:4px; font-family:monospace; font-size:12px; box-sizing:border-box;" placeholder="https://xxx.cocolog-nifty.com/blog/2026/01/post-xxx.html&#10;https://xxx.cocolog-nifty.com/blog/2026/01/post-yyy.html"></textarea>
     
-    linkElements.forEach(a => {
-      const href = a.href;
-      const title = a.innerText.trim();
-      if (href && !targets.some(t => t.url === href) && (href.includes('cocolog-nifty.com') || href.startsWith('http'))) {
-        targets.push({ url: href, title: title });
-      }
-    });
+    <button id="run-batch-btn" style="margin-top:10px; width:100%; padding:10px; background:#28a745; color:#fff; border:none; border-radius:4px; font-size:15px; font-weight:bold; cursor:pointer;">一括判定を実行する</button>
 
-    // 重複や余分なリンクを除外し、最大50件に絞る
-    targets = targets.slice(0, 50);
+    <div id="batch-progress" style="margin-top:15px; display:none;">
+      <p id="batch-status-text" style="font-weight:bold; color:#007bff; margin-bottom:5px;">処理中...</p>
+      <div id="batch-results-list"></div>
+    </div>
+    
+    <button id="close-batch-modal" style="margin-top:20px; width:100%; padding:8px; background:#6c757d; color:#fff; border:none; border-radius:4px; font-size:13px; cursor:pointer;">閉じる</button>
+  `;
 
-    if (targets.length === 0) {
-      alert("この記事一覧ページから判定対象のリンクが見つかりませんでした。記事一覧画面でお試しください。");
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
+
+  document.getElementById('close-batch-modal').onclick = function() { overlay.remove(); };
+
+  // 3. 判定実行処理
+  document.getElementById('run-batch-btn').onclick = async function() {
+    const rawText = document.getElementById('cocolog-url-input').value;
+    const urls = Array.from(new Set(rawText.split('\n').map(u => u.trim()).filter(u => u.startsWith('http'))));
+
+    if (urls.length === 0) {
+      alert("有効なURLが入力されていません。httpから始まるURLを貼り付けてください。");
       return;
     }
 
-    // 進捗表示用モーダルの作成
-    let progressOverlay = document.getElementById('cocolog-batch-modal');
-    if (progressOverlay) progressOverlay.remove();
+    const progressDiv = document.getElementById('batch-progress');
+    const statusText = document.getElementById('batch-status-text');
+    const resultsList = document.getElementById('batch-results-list');
 
-    progressOverlay = document.createElement('div');
-    progressOverlay.id = 'cocolog-batch-modal';
-    progressOverlay.style.cssText = "position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.6); z-index:999999; display:flex; align-items:center; justify-content:center; font-family:sans-serif;";
-    
-    const progressBox = document.createElement('div');
-    progressBox.style.cssText = "background:#fff; padding:25px 30px; border-radius:8px; width:90%; max-width:650px; max-height:85vh; overflow-y:auto; box-shadow:0 4px 20px rgba(0,0,0,0.3); font-size:13px; color:#333;";
-    progressBox.innerHTML = `<h2 style='margin-top:0; font-size:18px;'>【一括DOM判定 実行中...】</h2><p id='batch-status' style='font-weight:bold; color:#007bff;'>0 / ${targets.length} 記事をチェック中...</p><div id='batch-results-preview' style='margin-top:15px; max-height:50vh; overflow-y:auto; border-top:1px solid #eee; padding-top:10px;'></div>`;
-    
-    progressOverlay.appendChild(progressBox);
-    document.body.appendChild(progressOverlay);
+    progressDiv.style.display = "block";
+    resultsList.innerHTML = "";
+    this.disabled = true;
+    this.style.background = "#ccc";
 
-    const statusText = document.getElementById('batch-status');
-    const previewContainer = document.getElementById('batch-results-preview');
     let batchResults = [];
 
-    // 2. 1件ずつフェッチして判定を実行
-    for (let i = 0; i < targets.length; i++) {
-      const target = targets[i];
-      statusText.innerText = `${i + 1} / ${targets.length} 記事をチェック中: ${target.title || target.url}`;
+    for (let i = 0; i < urls.length; i++) {
+      const url = urls[i];
+      statusText.innerText = `${i + 1} / ${urls.length} 件目を判定中...`;
 
       try {
-        const response = await fetch(target.url);
+        const response = await fetch(url);
         const htmlText = await response.text();
-        
-        // 取得したHTMLを仮想DOMに展開して解析
+
         const parser = new DOMParser();
         const targetDoc = parser.parseFromString(htmlText, 'text/html');
 
@@ -58,13 +69,17 @@
         const pageText = (targetDoc.body ? targetDoc.body.innerText : "").replace(/\s+/g, " ");
         const fullHtml = targetDoc.body ? targetDoc.body.innerHTML : "";
         const mainArea = targetDoc.querySelector('.entry-body,.entry-content,.entry,.entry-inner,#alpha-inner') || targetDoc.body;
-        
+
         const txE = targetDoc.querySelector('.entry-header,.entry-title,h3.entry-header,h1,.entry-subject');
-        const tx = txE ? txE.innerText.trim() : target.title;
+        const tx = txE ? txE.innerText.trim() : "";
         if (!tx) m.push("記事タイトル");
 
         const fI = mainArea.querySelector('img');
         if (!fI) m.push("画像設置（本文内に画像が見つかりません）");
+
+        if (tx && (/(北海道|青森|岩手|宮城|秋田|山形|福島|茨城|栃木|群馬|埼玉|千葉|東京|神奈川|新潟|富山|石川|福井|山梨|長野|岐阜|静岡|愛知|三重|滋賀|京都|大阪|兵庫|奈良|和歌山|鳥取|島根|岡山|広島|山口|徳島|香川|愛媛|高知|福岡|佐賀|長崎|熊本|大分|宮崎|鹿児島|沖縄)/.test(tx) || /^.{1,5}[市区町村]/.test(tx))) {
+          l.push("タイトル異常: 先頭が地名");
+        }
 
         if (!pageText.includes("カテゴリ") || pageText.includes("カテゴリ：未分類") || pageText.includes("カテゴリー：未分類")){
           m.push("カテゴリ設定なし");
@@ -82,12 +97,12 @@
         if (gI) mU = gI.getAttribute('src') || "";
         else if (gA) mU = gA.getAttribute('href') || "";
 
-        r.forEach(i => {
-          if (i === "Googleマップ") {
+        r.forEach(item => {
+          if (item === "Googleマップ") {
             if (!pageText.includes("Googleマップ") && !gI && !gA) m.push("Googleマップ");
             else if ((gI || gA) && !hP(mU)) m.push("Googleマップ（ピン未設定）");
           } else {
-            if (!pageText.includes(i)) m.push(i);
+            if (!pageText.includes(item)) m.push(item);
           }
         });
 
@@ -98,7 +113,16 @@
         const sharpMatch = pageText.match(/#{2,}/);
         if (sharpMatch) l.push("連続シャープ検知: " + sharpMatch[0]);
 
-        // バックスラッシュチェック
+        // 重複ワード検知
+        const headingsForDup = mainArea.querySelectorAll('h1, h2, h3');
+        headingsForDup.forEach(function(h){
+          const ht = h.innerText.trim();
+          if(/([一-龥]{2,})\1/.test(ht) || /([\u3040-\u309F]{2,})\1/.test(ht)) {
+            l.push("見出し重複(連続ワード): " + ht);
+          }
+        });
+
+        // リンク・バックスラッシュチェック
         const allLinks = mainArea.querySelectorAll('a[href]');
         let officialLinkCount = 0;
         let hasGmapLink = (gI || gA);
@@ -117,8 +141,8 @@
         if (!hasGmapLink) m.push("Googleマップリンク未設置");
 
         batchResults.push({
-          title: tx || target.title || "無題の記事",
-          url: target.url,
+          title: tx || "タイトル取得不可",
+          url: url,
           missing: m,
           errors: l,
           isOk: (m.length === 0 && l.length === 0)
@@ -126,42 +150,37 @@
 
       } catch (err) {
         batchResults.push({
-          title: target.title || target.url,
-          url: target.url,
-          missing: ["ページ取得・解析エラー (CORS/アクセス権等)"],
+          title: "取得失敗",
+          url: url,
+          missing: ["ページ取得エラー"],
           errors: [],
           isOk: false
         });
       }
     }
 
-    // 3. 全判定終了後、結果を綺麗に一覧表示
-    let finalHtml = "<h2 style='margin-top:0; font-size:18px;'>【一括判定 結果一覧 (" + batchResults.length + "記事)】</h2>";
-    
-    batchResults.forEach((res, index) => {
-      const statusColor = res.isOk ? "green" : "red";
-      const statusIcon = res.isOk ? "✅" : "❌";
-      
-      finalHtml += `<div style='margin-bottom:12px; padding:10px; background:#f9f9f9; border-left:4px solid ${statusColor}; border-radius:4px;'>`;
-      finalHtml += `<div style='font-weight:bold; font-size:13px;'><a href='${res.url}' target='_blank' style='color:#333; text-decoration:none;'>${index + 1}. ${statusIcon} ${res.title}</a></div>`;
-      
+    // 4. 結果の描画
+    statusText.innerText = `完了！ (全 ${batchResults.length} 件)`;
+    statusText.style.color = "#28a745";
+
+    let resHtml = "<div style='margin-top:15px; border-top:2px solid #ddd; padding-top:10px;'>";
+    batchResults.forEach((res, idx) => {
+      const color = res.isOk ? "green" : "red";
+      const icon = res.isOk ? "✅" : "❌";
+      resHtml += `<div style='margin-bottom:10px; padding:8px 10px; background:#f8f9fa; border-left:4px solid ${color}; border-radius:3px;'>`;
+      resHtml += `<div style='font-weight:bold; font-size:12px;'><a href='${res.url}' target='_blank' style='color:#333;'>${idx + 1}. ${icon} ${res.title}</a></div>`;
       if (!res.isOk) {
-        finalHtml += "<ul style='margin:5px 0 0 20px; padding:0; color:#d9534f; font-size:12px;'>";
-        res.missing.forEach(item => finalHtml += `<li>[不足] ${item}</li>`);
-        res.errors.forEach(item => finalHtml += `<li>[異常] ${item}</li>`);
-        finalHtml += "</ul>";
-      } else {
-        finalHtml += "<div style='color:green; font-size:11px; margin-top:3px;'>問題なし</div>";
+        resHtml += `<ul style='margin:4px 0 0 18px; padding:0; color:#d9534f; font-size:11px;'>`;
+        res.missing.forEach(missingItem => resHtml += `<li>[不足] ${missingItem}</li>`);
+        res.errors.forEach(errItem => resHtml += `<li>[異常] ${errItem}</li>`);
+        resHtml += `</ul>`;
       }
-      finalHtml += `</div>`;
+      resHtml += `</div>`;
     });
+    resHtml += "</div>";
 
-    progressBox.innerHTML = finalHtml + "<button id='close-batch-modal' style='display:block; width:100%; margin-top:20px; padding:10px; background:#007bff; color:#fff; border:none; border-radius:4px; font-size:15px; cursor:pointer; font-weight:bold;'>閉じる</button>";
-    
-    document.getElementById('close-batch-modal').onclick = function() {
-      progressOverlay.remove();
-    };
-  }
-
-  runBatchCheck();
+    resultsList.innerHTML = resHtml;
+    this.disabled = false;
+    this.style.background = "#28a745";
+  };
 })();
