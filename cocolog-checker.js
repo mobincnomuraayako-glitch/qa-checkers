@@ -51,6 +51,12 @@
       l.push("AIコンテキストコード混入");
     }
 
+    // --- ▼ 連続するシャープ（##, ### など）の検出 ▼ ---
+    const sharpMatch = pageText.match(/#{2,}/);
+    if (sharpMatch) {
+      l.push("連続シャープの混入検知: " + sharpMatch[0]);
+    }
+
     // --- ▼ 見出しおよび本文中の連続重複ワード判定 ▼ ---
     const headingsForDup = mainArea.querySelectorAll('h1, h2, h3');
     headingsForDup.forEach(function(h){
@@ -176,7 +182,7 @@
     // --- ▼ HTML出力・リンク確認ボタン付きUIの生成 ▼ ---
     let resHtml = "<h2 style='margin-top:0; font-size:18px;'>【ココログ 判定結果】</h2>";
     if (m.length === 0 && l.length === 0) {
-      resHtml += "<p style='color:green; font-weight:bold;'>✅ 問題なし（全項目・リンク・エリア・設備・重複ワード正常）</p>";
+      resHtml += "<p style='color:green; font-weight:bold;'>✅ 問題なし（全項目・リンク・エリア・設備・重複ワード・シャープ正常）</p>";
     } else {
       resHtml += "<p style='color:red; font-weight:bold;'>❌ 要修正</p>";
       if (m.length > 0) {
