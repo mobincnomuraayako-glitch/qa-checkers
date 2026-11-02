@@ -51,7 +51,7 @@
       l.push("AIコンテキストコード混入");
     }
 
-    // --- ▼ 追加：H1〜H3見出しおよび本文中の連続重複ワード判定（「葬儀葬儀」など） ▼ ---
+    // --- ▼ 見出しおよび本文中の連続重複ワード判定 ▼ ---
     const headingsForDup = mainArea.querySelectorAll('h1, h2, h3');
     headingsForDup.forEach(function(h){
         const ht = h.innerText.trim();
@@ -70,9 +70,8 @@
             l.push("本文中の重複異常(連続ワード検知): " + dupWord);
         }
     });
-    // --- ▲ ここまで追加 ▲ ---
 
-    // --- ▼ 必須リンク・URLの強力な抽出処理 ▼ ---
+    // --- ▼ 必須リンク・URLの強力な抽出＆バックスラッシュチェック処理 ▼ ---
     const allLinks = mainArea.querySelectorAll('a[href]');
     let detectedUrls = [];
     let officialLinkCount = 0;
@@ -81,6 +80,11 @@
     allLinks.forEach(a => {
       const href = a.getAttribute('href');
       if (!href || !href.startsWith('http')) return;
+
+      // バックスラッシュチェック
+      if (href.includes('\\')) {
+        l.push("URLにバックスラッシュが含まれています: " + href);
+      }
 
       if (href.includes('maps.google.com') || href.includes('google.com/maps') || href.includes('goo.gl/maps') || href.includes('maps.app.goo.gl')) {
         hasGmapLink = true;
@@ -94,6 +98,9 @@
 
     if (gI) {
       detectedUrls.push({name: "Googleマップ(埋め込み)", url: gI.src});
+      if (gI.src.includes('\\')) {
+        l.push("マップ埋め込みURLにバックスラッシュが含まれています: " + gI.src);
+      }
     }
 
     if (officialLinkCount < 2) {
@@ -102,7 +109,6 @@
     if (!hasGmapLink) {
       m.push("Googleマップセクションのリンク（または埋め込み）が未設置");
     }
-    // --- ▲ ここまで ▲ ---
 
     // --- ▼ 所在地・アクセス周辺の地域・対応エリア＆番地判定 ▼ ---
     let accessText = pageText;
@@ -137,7 +143,6 @@
         l.push("店舗あり(番地記載あり)のため『対応エリア・地域』等の記載不可");
       }
     }
-    // --- ▲ ここまで ▲ ---
 
     // --- ▼ 設備セクションの禁止ワードチェック ▼ ---
     let equipmentText = "";
@@ -167,7 +172,6 @@
     if (foundNgKeywords.length > 0 && !equipmentText.includes("公開情報では確認できませんでした")) {
       l.push("設備セクションにサービスや特徴の文言混入 (検出ワード: " + foundNgKeywords.join(", ") + ")");
     }
-    // --- ▲ ここまで追加 ▲ ---
 
     // --- ▼ HTML出力・リンク確認ボタン付きUIの生成 ▼ ---
     let resHtml = "<h2 style='margin-top:0; font-size:18px;'>【ココログ 判定結果】</h2>";
