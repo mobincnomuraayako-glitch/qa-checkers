@@ -1,0 +1,43 @@
+(function(){
+  var textareas = document.querySelectorAll('textarea, [contenteditable="true"]');
+  var updated = false;
+
+  textareas.forEach(function(el) {
+    var content = el.value || el.innerHTML;
+    var fixed = content.replace(
+      /<a\s+([^>]*href=["'][^"']*["'][^>]*)>([\s\S]*?)(https?:\/\/[0-9a-zA-Z_\-\.\/\?=&%:#\+]+)([\u3000-\u9FBF\u3040-\u309F\u30A0-\u30FF。、！？]+.*?)<\/a>/gi,
+      function(match, attr, prefix, url, extra) {
+        return '<a ' + attr + '>' + prefix + url + '</a>' + extra;
+      }
+    );
+
+    if (content !== fixed) {
+      if (el.tagName === 'TEXTAREA') {
+        el.value = fixed;
+      } else {
+        el.innerHTML = fixed;
+      }
+      updated = true;
+    }
+  });
+
+  if (!updated) {
+    var body = document.body.innerHTML;
+    var fixedBody = body.replace(
+      /<a\s+([^>]*href=["'][^"']*["'][^>]*)>([\s\S]*?)(https?:\/\/[0-9a-zA-Z_\-\.\/\?=&%:#\+]+)([\u3000-\u9FBF\u3040-\u309F\u30A0-\u30FF。、！？]+.*?)<\/a>/gi,
+      function(match, attr, prefix, url, extra) {
+        return '<a ' + attr + '>' + prefix + url + '</a>' + extra;
+      }
+    );
+    if (body !== fixedBody) {
+      document.body.innerHTML = fixedBody;
+      updated = true;
+    }
+  }
+
+  if (updated) {
+    alert('✅ リンクの巻き込みを解除しました！');
+  } else {
+    alert('⚠️ 対象のリンクが見つかりませんでした。');
+  }
+})();
