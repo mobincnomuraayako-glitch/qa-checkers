@@ -1,11 +1,7 @@
 (function(){
-    var editor = (typeof tinyMCE !== 'undefined' && tinyMCE.activeEditor) ? tinyMCE.activeEditor : null;
-    var doc = editor ? editor.getDoc() : document;
-    var win = editor ? editor.getWin() : window;
-
-    var sel = win.getSelection();
+    var sel = window.getSelection();
     if (!sel || !sel.rangeCount) {
-        alert('置換したい範囲またはURLを選択してください。');
+        alert('置換したいテキストやURLを選択してください。');
         return;
     }
 
@@ -26,10 +22,10 @@
     };
 
     var range = sel.getRangeAt(0);
-    var container = doc.createElement("div");
+    var container = document.createElement("div");
     container.appendChild(range.cloneContents());
 
-    // <a>タグのパラメータ削除 ＆ 別窓設定
+    // 1. 既存の<a>タグのパラメータ削除 ＆ 別窓設定
     var links = container.getElementsByTagName('a');
     for (var j = 0; j < links.length; j++) {
         links[j].href = cleanUrl(links[j].href);
@@ -37,9 +33,9 @@
         links[j].setAttribute('rel', 'noopener noreferrer');
     }
 
-    // テキスト内のURL自動リンク化 ＆ パラメータ削除 ＆ 別窓設定
+    // 2. テキスト内のURL自動リンク化 ＆ パラメータ削除 ＆ 別窓設定
     var urlRegex = /https?:\/\/[^\s<]+[^\s<.,;:?!'"\)\]}]/g;
-    var walker = doc.createTreeWalker(container, NodeFilter.SHOW_TEXT, null, false);
+    var walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, null, false);
     var node;
     while(node = walker.nextNode()) {
         if(node.parentNode.tagName !== 'A') {
@@ -49,18 +45,15 @@
                     var cleaned = cleanUrl(match);
                     return '<a href="' + cleaned + '" target="_blank" rel="noopener noreferrer">' + cleaned + '</a>';
                 });
-                var span = doc.createElement('span');
+                var span = document.createElement('span');
                 span.innerHTML = newHtml;
                 node.parentNode.replaceChild(span, node);
             }
         }
     }
 
-    if (editor) {
-        editor.selection.setContent(container.innerHTML);
-    } else {
-        range.deleteContents();
-        var frag = range.createContextualFragment(container.innerHTML);
-        range.insertNode(frag);
-    }
+    // 選択範囲を安全に置き換え
+    range.deleteContents();
+    var frag = range.createContextualFragment(container.innerHTML);
+    range.insertNode(frag);
 })();
