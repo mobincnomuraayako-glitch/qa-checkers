@@ -1,6 +1,8 @@
 javascript:(function(){
   try {
     var count = 0;
+    
+    // URLからutm_などのGAパラメータをきれいに削る関数
     var cleanUrl = function(urlStr) {
       try {
         var url = new URL(urlStr);
@@ -25,40 +27,35 @@ javascript:(function(){
       var doc = editor.getDoc();
       if (!doc) { alert('エディタの読み込みに失敗しました'); return; }
 
-      // 既存の<a>タグのパラメータを掃除する処理
+      // 既存の<a>タグのhrefをチェックしてパラメータを削除
       var links = doc.getElementsByTagName('a');
       for (var i = 0; i < links.length; i++) {
         var oldHref = links[i].href;
         var newHref = cleanUrl(oldHref);
         if (oldHref !== newHref) {
           links[i].href = newHref;
-          links[i].textContent = newHref;
+          if (links[i].textContent.indexOf('http') === 0) {
+            links[i].textContent = newHref;
+          }
           count++;
         }
       }
 
+      // エディタ内のテキストノードに含まれるURLもチェックしてパラメータを削除
       function processNode(node) {
         if (node.nodeType === 3) {
           var parent = node.parentNode;
           if (parent && parent.nodeName.toLowerCase() !== 'a' && parent.nodeName.toLowerCase() !== 'script' && parent.nodeName.toLowerCase() !== 'style') {
             var text = node.nodeValue;
             if (urlRegex.test(text)) {
-              var fragment = doc.createDocumentFragment();
-              var lastIndex = 0;
-              text.replace(urlRegex, function(match, url, offset) {
-                fragment.appendChild(doc.createTextNode(text.substring(lastIndex, offset)));
-                var clean = cleanUrl(url.replace(/\\/g, ''));
-                var a = doc.createElement('a');
-                a.href = clean;
-                a.target = '_blank';
-                a.rel = 'noopener';
-                a.textContent = clean;
-                fragment.appendChild(a);
-                lastIndex = offset + match.length;
-                count++;
+              var newText = text.replace(urlRegex, function(match) {
+                var cleaned = cleanUrl(match);
+                if (cleaned !== match) count++;
+                return cleaned;
               });
-              fragment.appendChild(doc.createTextNode(text.substring(lastIndex)));
-              parent.replaceChild(fragment, node);
+              if (newText !== text) {
+                node.nodeValue = newText;
+              }
             }
           }
         } else if (node.nodeType === 1) {
@@ -81,11 +78,10 @@ javascript:(function(){
       }
       var text = textarea.value;
       
-      // テキストエリア内のURLをクリーンアップ
-      var newText = text.replace(urlRegex, function(match, url) {
-        var clean = cleanUrl(url.replace(/\\/g, ''));
-        count++;
-        return clean;
+      var newText = text.replace(urlRegex, function(match) {
+        var cleaned = cleanUrl(match);
+        if (cleaned !== match) count++;
+        return cleaned;
       });
 
       textarea.value = newText;
@@ -93,9 +89,9 @@ javascript:(function(){
     }
 
     if (count > 0) {
-      alert(count + ' 件のURLからutmパラメータ等のゴミを削除しました！');
+      alert(count + ' 件のURLからGA（utm）パラメータを削除しました！');
     } else {
-      alert('対象となるURLやパラメータは見つかりませんでした。');
+      alert('削除対象となるutmパラメータ付きのURLは見つかりませんでした。');
     }
   } catch(e) {
     alert('実行エラー: ' + e.message);
