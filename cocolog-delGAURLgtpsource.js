@@ -1,7 +1,8 @@
 (function(){
+    // 1. エディタ内か通常ページかに関わらず、現在の選択範囲を取得する汎用処理
     var sel = window.getSelection();
-    if (!sel || !sel.rangeCount) {
-        alert('置換したいテキストやURLを選択してください。');
+    if (!sel || sel.rangeCount === 0) {
+        alert('パラメータを削除したいテキストやURLを選択してください。');
         return;
     }
 
@@ -22,38 +23,39 @@
     };
 
     var range = sel.getRangeAt(0);
-    var container = document.createElement("div");
+    var container = document.createElement('div');
     container.appendChild(range.cloneContents());
 
-    // 1. 既存の<a>タグのパラメータ削除 ＆ 別窓設定
+    // HTMLが含まれていない（ただのテキスト選択の）場合の保険
+    if (container.innerHTML.trim() === '') {
+        container.textContent = range.toString();
+    }
+
+    // 2. <a>タグのリンク処理
     var links = container.getElementsByTagName('a');
-    for (var j = 0; j < links.length; j++) {
-        links[j].href = cleanUrl(links[j].href);
-        links[j].setAttribute('target', '_blank');
-        links[j].setAttribute('rel', 'noopener noreferrer');
+    for (var i = 0; i < links.length; i++) {
+        links[i].href = cleanUrl(links[i].href);
+        links[i].target = '_blank';
+        links[i].rel = 'noopener noreferrer';
     }
 
-    // 2. テキスト内のURL自動リンク化 ＆ パラメータ削除 ＆ 別窓設定
-    var urlRegex = /https?:\/\/[^\s<]+[^\s<.,;:?!'"\)\]}]/g;
-    var walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, null, false);
-    var node;
-    while(node = walker.nextNode()) {
-        if(node.parentNode.tagName !== 'A') {
-            var text = node.nodeValue;
-            if(urlRegex.test(text)) {
-                var newHtml = text.replace(urlRegex, function(match){
-                    var cleaned = cleanUrl(match);
-                    return '<a href="' + cleaned + '" target="_blank" rel="noopener noreferrer">' + cleaned + '</a>';
-                });
-                var span = document.createElement('span');
-                span.innerHTML = newHtml;
-                node.parentNode.replaceChild(span, node);
-            }
+    // 3. プレーンテキスト中のURL処理
+    var html = container.innerHTML;
+    var urlRegex = /https?:\/\/[^\s<"']+/g;
+    
+    // すでに<a>タグになっているものは置換除外して、テキスト内のURLだけを綺麗にする
+    html = html.replace(urlRegex, function(match){
+        if (match.indexOf('href=') !== -1 || match.indexOf('</a') !== -1) {
+            return match;
         }
-    }
+        var cleaned = cleanUrl(match);
+        return '<a href="' + cleaned + '" target="_blank" rel="noopener noreferrer">' + cleaned + '</a>';
+    });
 
-    // 選択範囲を安全に置き換え
+    // 4. 選択範囲を置き換え
     range.deleteContents();
-    var frag = range.createContextualFragment(container.innerHTML);
+    var frag = range.createContextualFragment(html);
     range.insertNode(frag);
+    
+    console.log('UTMパラメータ削除 ＆ 別窓設定が完了しました。');
 })();
