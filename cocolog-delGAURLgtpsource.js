@@ -1,5 +1,4 @@
 (function(){
-    // TinyMCEエディタのドキュメントまたは通常のドキュメントを取得
     var editor = (typeof tinyMCE !== 'undefined' && tinyMCE.activeEditor) ? tinyMCE.activeEditor : null;
     var doc = editor ? editor.getDoc() : document;
     var win = editor ? editor.getWin() : window;
@@ -30,7 +29,7 @@
     var container = doc.createElement("div");
     container.appendChild(range.cloneContents());
 
-    // <a> タグのリンク置換
+    // <a>タグのパラメータ削除 ＆ 別窓設定
     var links = container.getElementsByTagName('a');
     for (var j = 0; j < links.length; j++) {
         links[j].href = cleanUrl(links[j].href);
@@ -38,7 +37,7 @@
         links[j].setAttribute('rel', 'noopener noreferrer');
     }
 
-    // テキスト内のURL置換
+    // テキスト内のURL自動リンク化 ＆ パラメータ削除 ＆ 別窓設定
     var urlRegex = /https?:\/\/[^\s<]+[^\s<.,;:?!'"\)\]}]/g;
     var walker = doc.createTreeWalker(container, NodeFilter.SHOW_TEXT, null, false);
     var node;
